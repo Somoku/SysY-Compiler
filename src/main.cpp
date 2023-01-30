@@ -3,7 +3,9 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <cstring>
 #include "ast.hpp"
+#include "koopa.h"
 
 using namespace std;
 
@@ -39,7 +41,11 @@ int main(int argc, const char *argv[]) {
 
   // 输出生成的 Koopa IR
   yyout = freopen(output, "w", stdout);
-  ast->DumpIR();
+  std::string IR = ast->DumpIR();
+  char* str = new char[IR.size() + 1];
+  strcpy(str, ast->DumpIR().c_str());
+  std::cout << str;
   fclose(yyout);
+  delete []str;
   return 0;
 }

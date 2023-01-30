@@ -8,7 +8,7 @@ class BaseAST {
   public:
     virtual ~BaseAST() = default;
     virtual void Dump() const = 0;
-    virtual void DumpIR() const = 0;
+    virtual std::string DumpIR() const = 0;
 };
 
 // CompUnit
@@ -22,8 +22,8 @@ class CompUnitAST : public BaseAST {
         std::cout << " }";
     }
 
-    void DumpIR() const override {
-        func_def->DumpIR();
+    std::string DumpIR() const override {
+        return func_def->DumpIR();
     }
 };
 
@@ -42,14 +42,16 @@ class FuncDefAST : public BaseAST {
         std::cout << " }";
     }
 
-    void DumpIR() const override {
-        std::cout << "fun @";
-        std::cout << ident;
-        std::cout << "(): ";
-        func_type->DumpIR();
-        std::cout << "{" << std::endl;
-        block->DumpIR();
-        std::cout << "}" << std::endl;
+    std::string DumpIR() const override {
+        std::string str;
+        str += "fun @";
+        str += ident;
+        str += "(): ";
+        str += func_type->DumpIR();
+        str += "{\n";
+        str += block->DumpIR();
+        str += "}\n";
+        return str;
     }
 };
 
@@ -64,8 +66,9 @@ class FuncTypeAST : public BaseAST {
         std::cout << " }";
     }
 
-    void DumpIR() const override {
-        std::cout << "i32 ";
+    std::string DumpIR() const override {
+        std::string str("i32 ");
+        return str;
     }
 };
 
@@ -80,10 +83,12 @@ class BlockAST : public BaseAST {
         std::cout << " }";
     }
 
-    void DumpIR() const override {
-        std::cout << "\%entry:" << std::endl;
-        stmt->DumpIR();
-        std::cout << std::endl;
+    std::string DumpIR() const override {
+        std::string str;
+        str += "\%entry:\n";
+        str += stmt->DumpIR();
+        str += "\n";
+        return str;
     }
 };
 
@@ -98,9 +103,11 @@ class StmtAST : public BaseAST {
         std::cout << " }";
     }
 
-    void DumpIR() const override {
-        std::cout << "\tret ";
-        std::cout << number;
-        std::cout << std::endl;
+    std::string DumpIR() const override {
+        std::string str;
+        str += "\tret ";
+        str += std::to_string(number);
+        str += "\n";
+        return str;
     }
 };
