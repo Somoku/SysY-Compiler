@@ -5,7 +5,7 @@
 #include <string>
 #include <cstring>
 #include "ast.hpp"
-#include "koopa.h"
+#include "raw.hpp"
 
 using namespace std;
 
@@ -36,16 +36,29 @@ int main(int argc, const char *argv[]) {
   assert(!ret);
 
   // 输出解析得到的 AST, 其实就是个字符串
-  ast->Dump();
-  cout << endl;
+  // ast->Dump();
+  // cout << endl;
 
-  // 输出生成的 Koopa IR
-  yyout = freopen(output, "w", stdout);
+  // 获取字符串形式的 Koopa IR
   std::string IR = ast->DumpIR();
   char* str = new char[IR.size() + 1];
   strcpy(str, ast->DumpIR().c_str());
-  std::cout << str;
-  fclose(yyout);
+
+  if(!strcmp(mode, "-koopa")) {
+    // 输出生成的 Koopa IR
+    yyout = freopen(output, "w", stdout);
+    std::cout << str;
+    fclose(yyout);
+  }
+  else if(!strcmp(mode, "-riscv")) {
+    // 将 Koopa IR 转换成 RISC-V 汇编
+    yyout = freopen(output, "w", stdout);
+    koopa_raw_program_builder_t builder = new_builder();
+    koopa_raw_program_t raw = generate_raw(str, builder);
+    Visit(raw);
+    fclose(yyout);
+    delete_builder(builder);
+  }
   delete []str;
   return 0;
 }
