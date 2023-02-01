@@ -3,6 +3,7 @@
 #include <memory>
 #include <string>
 #include <iostream>
+#include <cassert>
 
 // Base of all AST
 class BaseAST {
@@ -11,6 +12,8 @@ class BaseAST {
     virtual void Dump() const = 0;
     virtual std::string DumpIR() const = 0;
 };
+
+static int ast_i = 0;
 
 // CompUnit
 class CompUnitAST : public BaseAST {
@@ -96,19 +99,149 @@ class BlockAST : public BaseAST {
 // Stmt
 class StmtAST : public BaseAST {
   public:
-    int number;
+    std::unique_ptr<BaseAST> exp;
 
     void Dump() const override {
         std::cout << "StmtAST { ";
-        std::cout << number;
+        exp->Dump();
         std::cout << " }";
     }
 
     std::string DumpIR() const override {
         std::string str;
+        str += exp->DumpIR();
         str += "\tret ";
-        str += std::to_string(number);
+        str += "\%";
+        str += std::to_string(ast_i - 1);
         str += "\n";
+        return str;
+    }
+};
+
+// Exp
+class ExpAST : public BaseAST {
+  public:
+    std::unique_ptr<BaseAST> unaryexp;
+
+    void Dump() const override {
+        std::cout << "ExpAST { ";
+        unaryexp->Dump();
+        std::cout << " }";
+    }
+
+    std::string DumpIR() const override {
+        std::string str;
+        str = unaryexp->DumpIR();
+        return str;
+    }
+};
+
+// Primary Auxiliary Data
+enum PrimaryType {
+    Exp,
+    Number
+};
+
+// PrimaryExp
+class PrimaryExpAST : public BaseAST {
+  public:
+    PrimaryType type;
+    std::unique_ptr<BaseAST> exp;
+    int number;
+
+    void Dump() const override {
+        std::cout << "PrimaryExpAST { ";
+        switch(type) {
+            case Exp:
+                exp->Dump();
+                break;
+            case Number:
+                std::cout << number;
+                break;
+            default:
+                assert(false);
+        }
+        std::cout << " }";
+    }
+
+    std::string DumpIR() const override {
+        std::string str;
+        switch(type) {
+            case Exp:
+                str = exp->DumpIR();
+                break;
+            case Number:
+                str += "\t\%";
+                str += std::to_string(ast_i);
+                str += " = add ";
+                str += std::to_string(number);
+                str += ", 0\n";
+                ast_i++;
+                break;
+            default:
+                assert(false);
+        }
+        return str;
+    }
+};
+
+// Unary Auxiliary Data
+enum UnaryType {
+    PrimaryExp,
+    UnaryExp
+};
+
+// UnaryExp
+class UnaryExpAST : public BaseAST {
+  public:
+    UnaryType type;
+    std::unique_ptr<BaseAST> exp;
+    char unaryop;
+
+    void Dump() const override {
+        std::cout << "UnaryExpAST { ";
+        switch(type) {
+            case PrimaryExp:
+                exp->Dump();
+                break;
+            case UnaryExp:
+                std::cout << unaryop << " ";
+                exp->Dump();
+                break;
+            default:
+                assert(false);
+        }
+        std::cout << " }";
+    }
+
+    std::string DumpIR() const override {
+        std::string str;
+        switch(type) {
+            case PrimaryExp:
+                str = exp->DumpIR();
+                break;
+            case UnaryExp:
+                str = exp->DumpIR();
+                if(unaryop == '-'){
+                    str += "\t\%";
+                    str += std::to_string(ast_i);
+                    str += " = sub 0, \%";
+                    str += std::to_string(ast_i - 1);
+                    str += "\n";
+                    ast_i++;
+                }
+                else if(unaryop == '!'){
+                    str += "\t\%";
+                    str += std::to_string(ast_i);
+                    str += " = eq \%";
+                    str += std::to_string(ast_i - 1);
+                    str += ", 0\n";
+                    ast_i++;
+                }
+                break;
+            default:
+                assert(false);
+        }
         return str;
     }
 };

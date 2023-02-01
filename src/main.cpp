@@ -42,7 +42,7 @@ int main(int argc, const char *argv[]) {
   // 获取字符串形式的 Koopa IR
   std::string IR = ast->DumpIR();
   char* str = new char[IR.size() + 1];
-  strcpy(str, ast->DumpIR().c_str());
+  strcpy(str, IR.c_str());
 
   if(!strcmp(mode, "-koopa")) {
     // 输出生成的 Koopa IR
