@@ -179,7 +179,6 @@ MulExp
     auto ast = new MulExpAST();
     ast->unaryexp = unique_ptr<BaseAST>($3);
     ast->mulexp = unique_ptr<BaseAST>($1);
-    // ast->mulop = '*';
     ast->type = MulType::Mul_MulExp;
     $$ = ast;
   }
@@ -187,7 +186,6 @@ MulExp
     auto ast = new MulExpAST();
     ast->unaryexp = unique_ptr<BaseAST>($3);
     ast->mulexp = unique_ptr<BaseAST>($1);
-    // ast->mulop = '/';
     ast->type = MulType::Mul_DivExp;
     $$ = ast;
   }
@@ -195,7 +193,6 @@ MulExp
     auto ast = new MulExpAST();
     ast->unaryexp = unique_ptr<BaseAST>($3);
     ast->mulexp = unique_ptr<BaseAST>($1);
-    // ast->mulop = '%';
     ast->type = MulType::Mul_ModExp;
     $$ = ast;
   }
@@ -212,7 +209,6 @@ AddExp
     auto ast = new AddExpAST();
     ast->mulexp = unique_ptr<BaseAST>($3);
     ast->addexp = unique_ptr<BaseAST>($1);
-    // ast->addop = '+';
     ast->type = AddType::Add_AddExp;
     $$ = ast;
   }
@@ -220,7 +216,6 @@ AddExp
     auto ast = new AddExpAST();
     ast->mulexp = unique_ptr<BaseAST>($3);
     ast->addexp = unique_ptr<BaseAST>($1);
-    // ast->addop = '-';
     ast->type = AddType::Add_MinusExp;
     $$ = ast;
   }
@@ -237,7 +232,6 @@ RelExp
     auto ast = new RelExpAST();
     ast->addexp = unique_ptr<BaseAST>($3);
     ast->relexp = unique_ptr<BaseAST>($1);
-    // ast->relop = string("<");
     ast->type = RelType::Rel_LTExp;
     $$ = ast;
   }
@@ -245,7 +239,6 @@ RelExp
     auto ast = new RelExpAST();
     ast->addexp = unique_ptr<BaseAST>($3);
     ast->relexp = unique_ptr<BaseAST>($1);
-    // ast->relop = string(">");
     ast->type = RelType::Rel_GTExp;
     $$ = ast;
   }
@@ -253,7 +246,6 @@ RelExp
     auto ast = new RelExpAST();
     ast->addexp = unique_ptr<BaseAST>($3);
     ast->relexp = unique_ptr<BaseAST>($1);
-    // ast->relop = string("<=");
     ast->type = RelType::Rel_LEExp;
     $$ = ast;
   }
@@ -261,7 +253,6 @@ RelExp
     auto ast = new RelExpAST();
     ast->addexp = unique_ptr<BaseAST>($3);
     ast->relexp = unique_ptr<BaseAST>($1);
-    // ast->relop = string(">=");
     ast->type = RelType::Rel_GEExp;
     $$ = ast;
   }
@@ -278,7 +269,6 @@ EqExp
     auto ast = new EqExpAST();
     ast->relexp = unique_ptr<BaseAST>($3);
     ast->eqexp = unique_ptr<BaseAST>($1);
-    // ast->eqop = string("==");
     ast->type = EqType::Eq_EQExp;
     $$ = ast;
   }
@@ -286,7 +276,6 @@ EqExp
     auto ast = new EqExpAST();
     ast->relexp = unique_ptr<BaseAST>($3);
     ast->eqexp = unique_ptr<BaseAST>($1);
-    // ast->eqop = string("!=");
     ast->type = EqType::Eq_NEQExp;
     $$ = ast;
   }
