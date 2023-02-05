@@ -1,6 +1,7 @@
 %code requires {
   #include <memory>
   #include <string>
+  #include <vector>
   #include "ast.hpp"
 }
 
@@ -10,6 +11,7 @@
 #include <memory>
 #include <string>
 #include <cstdlib>
+#include <vector>
 #include "ast.hpp"
 
 // 声明 lexer 函数和错误处理函数
@@ -35,11 +37,12 @@ using namespace std;
   int int_val;
   char char_val;
   BaseAST *ast_val;
+  std::vector<std::unique_ptr<BaseAST> > *vec_ast_val;
 }
 
 // lexer 返回的所有 token 种类的声明
 // 注意 IDENT 和 INT_CONST 会返回 token 的值, 分别对应 str_val 和 int_val
-%token INT RETURN
+%token INT RETURN CONST
 %token LT GT LE GE EQ NEQ
 %token AND OR
 %token <str_val> IDENT
@@ -47,9 +50,11 @@ using namespace std;
 
 // 非终结符的类型定义
 %type <ast_val> FuncDef FuncType Block Stmt Exp PrimaryExp UnaryExp MulExp 
-                AddExp RelExp EqExp LAndExp LOrExp
+                AddExp RelExp EqExp LAndExp LOrExp Decl ConstDecl BType
+                ConstDef ConstInitVal BlockItem LVal ConstExp
 %type <int_val> Number
 %type <char_val> UnaryOp
+%type <vec_ast_val> ConstDefVec BlockItemVec
 
 %%
 
@@ -90,18 +95,18 @@ FuncDef
 FuncType
   : INT {
     auto ast = new FuncTypeAST();
-    ast->type_int = string("int");
+    ast->int_type = string("int");
     $$ = ast;
   }
   ;
 
-Block
+/* Block
   : '{' Stmt '}' {
     auto ast = new BlockAST();
     ast->stmt = unique_ptr<BaseAST>($2);
     $$ = ast;
   }
-  ;
+  ; */
 
 Stmt
   : RETURN Exp ';' {
@@ -131,6 +136,11 @@ PrimaryExp
     ast->number = $1;
     ast->type = PrimaryType::Primary_Number;
     $$ = ast;
+  }
+  | LVal {
+    auto ast = new PrimaryExpAST();
+    ast->lval = unique_ptr<BaseAST>($1);
+    ast->type = PrimaryType::Primary_Lval;
   }
   ;
 
@@ -312,6 +322,124 @@ LOrExp
     $$ = ast;
   }
   ;
+
+Decl
+  : ConstDecl {
+    auto ast = new DeclAST();
+    ast->constdeclexp = unique_ptr<BaseAST>($1);
+    $$ = ast;
+  }
+  ;
+
+ConstDecl
+  : CONST BType ConstDefVec ';' {
+    auto ast = new ConstDeclAST();
+    ast->btype = unique_ptr<BaseAST>($2);
+    ast->constdefvec = unique_ptr<vector<unique_ptr<BaseAST> > >($3);
+    $$ = ast;
+  }
+  ;
+
+ConstDefVec
+  : ConstDef {
+    auto constdef = unique_ptr<BaseAST>($1);
+    auto constdefvec = new vector<unique_ptr<BaseAST> >();
+    constdefvec->push_back(move(constdef));
+    $$ = constdefvec;
+  }
+  | ConstDef ',' ConstDefVec {
+    auto constdef = unique_ptr<BaseAST>($1);
+    auto constdefvec = $3;
+    constdefvec->push_back(move(constdef));
+    $$ = constdefvec;
+  }
+  ;
+
+BType
+  : INT {
+    auto ast = new BTypeAST();
+    ast->int_type = string("int");
+    $$ = ast;
+  }
+  ;
+
+ConstDef
+  : IDENT '=' ConstInitVal {
+    auto ast = new ConstDefAST();
+    ast->ident = *unique_ptr<string>($1);
+    ast->constinitval = unique_ptr<BaseAST>($3);
+    $$ = ast;
+  }
+  ;
+
+ConstInitVal
+  : ConstExp {
+    auto ast = new ConstInitValAST();
+    ast->constexp = unique_ptr<BaseAST>($1);
+    $$ = ast;
+  }
+  ;
+
+Block
+  : '{' BlockItemVec '}' {
+    auto ast = new BlockAST();
+    ast->blockitemvec = unique_ptr<vector<unique_ptr<BaseAST> > >($2);
+    ast->type = BlockType::Block_Items;
+    $$ = ast;
+  }
+  | '{' '}' {
+    auto ast = new BlockAST();
+    ast->type = BlockType::Block_Null;
+    $$ = ast;
+  }
+  ;
+
+BlockItemVec
+  : BlockItem BlockItemVec {
+    auto blockitem = unique_ptr<BaseAST>($1);
+    auto blockitemvec = $2;
+    blockitemvec->push_back(move(blockitem));
+    $$ = blockitemvec;
+  }
+  | BlockItem {
+    auto blockitem = unique_ptr<BaseAST>($1);
+    auto blockitemvec = new vector<unique_ptr<BaseAST> >();
+    blockitemvec->push_back(move(blockitem));
+    $$ = blockitemvec;
+  }
+  ;
+
+BlockItem
+  : Decl {
+    auto ast = new BlockItemAST();
+    ast->decl = unique_ptr<BaseAST>($1);
+    ast->type = BlockItemType::BlockItem_Decl;
+    $$ = ast;
+  }
+  | Stmt {
+    auto ast = new BlockItemAST();
+    ast->stmt = unique_ptr<BaseAST>($1);
+    ast->type = BlockItemType::BlockItem_Stmt;
+    $$ = ast;
+  }
+  ;
+
+LVal
+  : IDENT {
+    auto ast = new LValAST();
+    ast->ident = *unique_ptr<string>($1);
+    $$ = ast;
+  }
+  ;
+
+ConstExp
+  : Exp {
+    auto ast = new ConstExpAST();
+    ast->exp = unique_ptr<BaseAST>($1);
+    $$ = ast;
+  }
+  ;
+
 %%
 
 // 定义错误处理函数, 其中第二个参数是错误信息

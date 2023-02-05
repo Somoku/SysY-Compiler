@@ -44,6 +44,7 @@ Hexadecimal   0[xX][0-9a-fA-F]+
 "!="            { return NEQ; }
 "&&"            { return AND; }
 "||"            { return OR; }
+"const"         { return CONST; }
 
 {Identifier}    { yylval.str_val = new string(yytext); return IDENT; }
 
