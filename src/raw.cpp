@@ -161,15 +161,24 @@ void Visit(const koopa_raw_integer_t &integer) {
 
 // 访问 binary 运算指令
 void Visit(const koopa_raw_binary_t &binary, int &st_id) {
-  if(binary.lhs->kind.tag == KOOPA_RVT_INTEGER)
-    std::cout << "\tli t2, " << binary.lhs->kind.data.integer.value << std::endl;
+  bool lhs_int = false;
+  bool rhs_int = false;
+
+  if(binary.lhs->kind.tag == KOOPA_RVT_INTEGER) { 
+    lhs_int = true;
+    if((koopa_raw_binary_op)binary.op != KOOPA_RBO_ADD)
+      std::cout << "\tli t2, " << binary.lhs->kind.data.integer.value << std::endl;
+  }
   else{
     std::cout << "\tli t4, " << stack_offset[binary.lhs] << std::endl; 
     std::cout << "\tadd t4, sp, t4\n";
     std::cout << "\tlw t2, (t4)\n";
   }
-  if(binary.rhs->kind.tag == KOOPA_RVT_INTEGER)
-    std::cout << "\tli t3, " << binary.rhs->kind.data.integer.value << std::endl;
+  if(binary.rhs->kind.tag == KOOPA_RVT_INTEGER) {
+    rhs_int = true;
+    if((koopa_raw_binary_op)binary.op != KOOPA_RBO_ADD)
+      std::cout << "\tli t3, " << binary.rhs->kind.data.integer.value << std::endl;
+  }
   else{
     std::cout << "\tli t4, " << stack_offset[binary.rhs] << std::endl; 
     std::cout << "\tadd t4, sp, t4\n";
@@ -218,7 +227,15 @@ void Visit(const koopa_raw_binary_t &binary, int &st_id) {
       std::cout << "\tsw t4, (t6)\n";
       break;
     case KOOPA_RBO_ADD:
-      std::cout << "\tadd t4, t2, t3\n";
+      if(lhs_int && rhs_int && binary.lhs->kind.data.integer.value == 0)
+        std::cout << "\tli t4, " << binary.rhs->kind.data.integer.value << std::endl;
+      else {
+        if(lhs_int)
+          std::cout << "\tli t2, " << binary.lhs->kind.data.integer.value << std::endl;
+        if(rhs_int)
+          std::cout << "\tli t3, " << binary.rhs->kind.data.integer.value << std::endl;
+        std::cout << "\tadd t4, t2, t3\n";
+      }
       std::cout << "\tli t6, " << st_id << std::endl;
       std::cout << "\tadd t6, sp, t6\n";
       std::cout << "\tsw t4, (t6)\n";
