@@ -51,10 +51,11 @@ using namespace std;
 // 非终结符的类型定义
 %type <ast_val> FuncDef FuncType Block Stmt Exp PrimaryExp UnaryExp MulExp 
                 AddExp RelExp EqExp LAndExp LOrExp Decl ConstDecl BType
-                ConstDef ConstInitVal BlockItem LVal ConstExp
+                ConstDef ConstInitVal BlockItem LVal ConstExp VarDecl VarDef
+                InitVal
 %type <int_val> Number
 %type <char_val> UnaryOp
-%type <vec_ast_val> ConstDefVec BlockItemVec
+%type <vec_ast_val> ConstDefVec BlockItemVec VarDefVec
 
 %%
 
@@ -112,6 +113,14 @@ Stmt
   : RETURN Exp ';' {
     auto ast = new StmtAST();
     ast->exp = unique_ptr<BaseAST>($2);
+    ast->type = StmtType::Stmt_Ret;
+    $$ = ast;
+  }
+  | LVal '=' Exp ';' {
+    auto ast = new StmtAST();
+    ast->lval = unique_ptr<BaseAST>($1);
+    ast->exp = unique_ptr<BaseAST>($3);
+    ast->type = StmtType::Stmt_Lval;
     $$ = ast;
   }
   ;
@@ -131,16 +140,16 @@ PrimaryExp
     ast->type = PrimaryType::Primary_Exp;
     $$ = ast;
   }
+  | LVal {
+    auto ast = new PrimaryExpAST();
+    ast->lval = unique_ptr<BaseAST>($1);
+    ast->type = PrimaryType::Primary_Lval;
+  }
   | Number {
     auto ast = new PrimaryExpAST();
     ast->number = $1;
     ast->type = PrimaryType::Primary_Number;
     $$ = ast;
-  }
-  | LVal {
-    auto ast = new PrimaryExpAST();
-    ast->lval = unique_ptr<BaseAST>($1);
-    ast->type = PrimaryType::Primary_Lval;
   }
   ;
 
@@ -326,7 +335,14 @@ LOrExp
 Decl
   : ConstDecl {
     auto ast = new DeclAST();
-    ast->constdeclexp = unique_ptr<BaseAST>($1);
+    ast->exp = unique_ptr<BaseAST>($1);
+    ast->type = DeclType::Decl_Const;
+    $$ = ast;
+  }
+  | VarDecl {
+    auto ast = new DeclAST();
+    ast->exp = unique_ptr<BaseAST>($1);
+    ast->type = DeclType::Decl_Var;
     $$ = ast;
   }
   ;
@@ -440,6 +456,53 @@ ConstExp
   }
   ;
 
+VarDecl
+  : BType VarDefVec ';' {
+    auto ast = new VarDeclAST();
+    ast->btype = unique_ptr<BaseAST>($1);
+    ast->vardefvec = unique_ptr<vector<unique_ptr<BaseAST> > >($2);
+    $$ = ast;
+  }
+  ;
+
+VarDefVec
+  : VarDef {
+    auto vardef = unique_ptr<BaseAST>($1);
+    auto vardefvec = new vector<unique_ptr<BaseAST> >();
+    vardefvec->push_back(move(vardef));
+    $$ = vardefvec;
+  }
+  | VarDef ',' VarDefVec {
+    auto vardef = unique_ptr<BaseAST>($1);
+    auto vardefvec = $3;
+    vardefvec->push_back(move(vardef));
+    $$ = vardefvec;
+  }
+  ;
+
+VarDef
+  : IDENT {
+    auto ast = new VarDefAST();
+    ast->type = VarDefType::VarDef_NO_Init;
+    ast->ident = *unique_ptr<string>($1);
+    $$ = ast;
+  }
+  | IDENT '=' InitVal {
+    auto ast = new VarDefAST();
+    ast->type = VarDefType::VarDef_Init;
+    ast->ident = *unique_ptr<string>($1);
+    ast->initval = unique_ptr<BaseAST>($3);
+    $$ = ast;
+  }
+  ;
+
+InitVal
+  : Exp {
+    auto ast = new InitValAST();
+    ast->exp = unique_ptr<BaseAST>($1);
+    $$ = ast;
+  }
+  ;
 %%
 
 // 定义错误处理函数, 其中第二个参数是错误信息

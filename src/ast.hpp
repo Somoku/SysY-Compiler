@@ -8,15 +8,25 @@
 #include <unordered_map>
 
 static int ast_i = 0;
-static std::unordered_map<std::string, int> symbol_table;
+
+enum symbol_tag {
+    Symbol_Const,
+    Symbol_Var
+};
+
+typedef struct {
+    int value;
+    symbol_tag tag;
+} symbol_t;
+static std::unordered_map<std::string, symbol_t> symbol_table;
 
 // Base of all AST
 class BaseAST {
   public:
     virtual ~BaseAST() = default;
-    // virtual void Dump() const = 0;
     virtual std::string DumpIR() const = 0;
     virtual int ConstCalc() const = 0;
+    virtual std::string getIdent() const = 0;
 };
 
 // CompUnit
@@ -24,18 +34,16 @@ class CompUnitAST : public BaseAST {
   public:
     std::unique_ptr<BaseAST> func_def;
 
-    // void Dump() const override {
-    //     std::cout << "CompUnitAST { ";
-    //     func_def->Dump();
-    //     std::cout << " }";
-    // }
-
     std::string DumpIR() const override {
         return func_def->DumpIR();
     }
 
     int ConstCalc() const override {
         return 0;
+    }
+
+    std::string getIdent() const override {
+        return std::string();
     }
 };
 
@@ -45,14 +53,6 @@ class FuncDefAST : public BaseAST {
     std::unique_ptr<BaseAST> func_type;
     std::string ident;
     std::unique_ptr<BaseAST> block;
-
-    // void Dump() const override {
-    //     std::cout << "FuncDefAST { ";
-    //     func_type->Dump();
-    //     std::cout << ", " << ident << ", ";
-    //     block->Dump();
-    //     std::cout << " }";
-    // }
 
     std::string DumpIR() const override {
         std::string str;
@@ -69,18 +69,16 @@ class FuncDefAST : public BaseAST {
     int ConstCalc() const override {
         return 0;
     }
+
+    std::string getIdent() const override {
+        return std::string();
+    }
 };
 
 // FuncType
 class FuncTypeAST : public BaseAST {
   public:
     std::string int_type;
-    
-    // void Dump() const override {
-    //     std::cout << "FuncTypeAST { ";
-    //     std::cout << type_int;
-    //     std::cout << " }";
-    // }
 
     std::string DumpIR() const override {
         std::string str("i32 ");
@@ -89,6 +87,10 @@ class FuncTypeAST : public BaseAST {
 
     int ConstCalc() const override {
         return 0;
+    }
+
+    std::string getIdent() const override {
+        return std::string();
     }
 };
 
@@ -104,12 +106,6 @@ class BlockAST : public BaseAST {
     BlockType type;
     std::unique_ptr<std::vector<std::unique_ptr<BaseAST> > > blockitemvec;
 
-    // void Dump() const override {
-    //     std::cout << "BlockAST { ";
-    //     stmt->Dump();
-    //     std::cout << " }";
-    // }
-
     std::string DumpIR() const override {
         std::string str;
         str += "\%entry:\n";
@@ -124,31 +120,51 @@ class BlockAST : public BaseAST {
     int ConstCalc() const override {
         return 0;
     }
+
+    std::string getIdent() const override {
+        return std::string();
+    }
+};
+
+// Stmt Auxiliary data
+enum StmtType {
+    Stmt_Ret,
+    Stmt_Lval
 };
 
 // Stmt
 class StmtAST : public BaseAST {
   public:
+    StmtType type;
     std::unique_ptr<BaseAST> exp;
-
-    // void Dump() const override {
-    //     std::cout << "StmtAST { ";
-    //     exp->Dump();
-    //     std::cout << " }";
-    // }
+    std::unique_ptr<BaseAST> lval;
 
     std::string DumpIR() const override {
         std::string str;
-        str += exp->DumpIR();
-        str += "\tret ";
-        str += "\%";
-        str += std::to_string(ast_i - 1);
-        str += "\n";
+        if(type == Stmt_Ret) {
+            str += exp->DumpIR();
+            str += "\tret ";
+            str += "\%";
+            str += std::to_string(ast_i - 1);
+            str += "\n";
+        }
+        else {
+            str += exp->DumpIR();
+            str += "\tstore \%";
+            str += std::to_string(ast_i - 1);
+            str += ", @";
+            str += lval->getIdent();
+            str += "\n";
+        }
         return str;
     }
 
     int ConstCalc() const override {
         return 0;
+    }
+
+    std::string getIdent() const override {
+        return std::string();
     }
 };
 
@@ -156,12 +172,6 @@ class StmtAST : public BaseAST {
 class ExpAST : public BaseAST {
   public:
     std::unique_ptr<BaseAST> lorexp;
-
-    // void Dump() const override {
-    //     std::cout << "ExpAST { ";
-    //     lorexp->Dump();
-    //     std::cout << " }";
-    // }
 
     std::string DumpIR() const override {
         std::string str;
@@ -171,6 +181,10 @@ class ExpAST : public BaseAST {
 
     int ConstCalc() const override {
         return lorexp->ConstCalc();
+    }
+
+    std::string getIdent() const override {
+        return std::string();
     }
 };
 
@@ -188,21 +202,6 @@ class PrimaryExpAST : public BaseAST {
     std::unique_ptr<BaseAST> exp;
     std::unique_ptr<BaseAST> lval;
     int number;
-
-    // void Dump() const override {
-    //     std::cout << "PrimaryExpAST { ";
-    //     switch(type) {
-    //         case Primary_Exp:
-    //             exp->Dump();
-    //             break;
-    //         case Primary_Number:
-    //             std::cout << number;
-    //             break;
-    //         default:
-    //             assert(false);
-    //     }
-    //     std::cout << " }";
-    // }
 
     std::string DumpIR() const override {
         std::string str;
@@ -242,6 +241,10 @@ class PrimaryExpAST : public BaseAST {
                 assert(false);
         }
     }
+
+    std::string getIdent() const override {
+        return std::string();
+    }
 };
 
 // Unary Auxiliary Data
@@ -256,22 +259,6 @@ class UnaryExpAST : public BaseAST {
     UnaryType type;
     std::unique_ptr<BaseAST> exp;
     char unaryop;
-
-    // void Dump() const override {
-    //     std::cout << "UnaryExpAST { ";
-    //     switch(type) {
-    //         case Unary_PrimaryExp:
-    //             exp->Dump();
-    //             break;
-    //         case Unary_UnaryExp:
-    //             std::cout << unaryop << " ";
-    //             exp->Dump();
-    //             break;
-    //         default:
-    //             assert(false);
-    //     }
-    //     std::cout << " }";
-    // }
 
     std::string DumpIR() const override {
         std::string str;
@@ -321,6 +308,10 @@ class UnaryExpAST : public BaseAST {
                 assert(false);
         }
     }
+
+    std::string getIdent() const override {
+        return std::string();
+    }
 };
 
 // MulExp Auxiliary data
@@ -337,34 +328,6 @@ class MulExpAST : public BaseAST {
     MulType type;
     std::unique_ptr<BaseAST> mulexp;
     std::unique_ptr<BaseAST> unaryexp;
-    // char mulop;
-
-    // void Dump() const override {
-    //     std::cout << "MulExpAST { ";
-    //     switch(type) {
-    //         case Mul_UnaryExp:
-    //             unaryexp->Dump();
-    //             break;
-    //         case Mul_MulExp:
-    //             mulexp->Dump();
-    //             std::cout << " * ";
-    //             unaryexp->Dump();
-    //             break;
-    //         case Mul_DivExp:
-    //             mulexp->Dump();
-    //             std::cout << " / ";
-    //             unaryexp->Dump();
-    //             break;
-    //         case Mul_ModExp:
-    //             mulexp->Dump();
-    //             std::cout << " \% ";
-    //             unaryexp->Dump();
-    //             break;
-    //         default:
-    //             assert(false);
-    //     }
-    //     std::cout << " }";
-    // }
 
     std::string DumpIR() const override {
         std::string str;
@@ -436,6 +399,10 @@ class MulExpAST : public BaseAST {
                 assert(false);
         }
     }
+
+    std::string getIdent() const override {
+        return std::string();
+    }
 };
 
 // AddExp Auxiliary data
@@ -451,29 +418,6 @@ class AddExpAST : public BaseAST {
     AddType type;
     std::unique_ptr<BaseAST> addexp;
     std::unique_ptr<BaseAST> mulexp;
-    // char addop;
-
-    // void Dump() const override {
-    //     std::cout << "AddExpAST { ";
-    //     switch(type) {
-    //         case Add_MulExp:
-    //             mulexp->Dump();
-    //             break;
-    //         case Add_AddExp:
-    //             addexp->Dump();
-    //             std::cout << " + ";
-    //             mulexp->Dump();
-    //             break;
-    //         case Add_MinusExp:
-    //             addexp->Dump();
-    //             std::cout << " - ";
-    //             mulexp->Dump();
-    //             break;
-    //         default:
-    //             assert(false);
-    //     }
-    //     std::cout << " }";
-    // }
 
     std::string DumpIR() const override {
         std::string str;
@@ -529,6 +473,10 @@ class AddExpAST : public BaseAST {
                 assert(false);
         }
     }
+
+    std::string getIdent() const override {
+        return std::string();
+    }
 };
 
 // RelExp Auxiliary data
@@ -546,39 +494,6 @@ class RelExpAST : public BaseAST {
     RelType type;
     std::unique_ptr<BaseAST> relexp;
     std::unique_ptr<BaseAST> addexp;
-    // std::string relop;
-
-    // void Dump() const override {
-    //     std::cout << "RelExpAST { ";
-    //     switch(type) {
-    //         case Rel_AddExp:
-    //             addexp->Dump();
-    //             break;
-    //         case Rel_LTExp:
-    //             relexp->Dump();
-    //             std::cout << " < ";
-    //             addexp->Dump();
-    //             break;
-    //         case Rel_GTExp:
-    //             relexp->Dump();
-    //             std::cout << " > ";
-    //             addexp->Dump();
-    //             break;
-    //         case Rel_LEExp:
-    //             relexp->Dump();
-    //             std::cout << " <= ";
-    //             addexp->Dump();
-    //             break;
-    //         case Rel_GEExp:
-    //             relexp->Dump();
-    //             std::cout << " >= ";
-    //             addexp->Dump();
-    //             break;
-    //         default:
-    //             assert(false);
-    //     }
-    //     std::cout << " }";
-    // }
 
     std::string DumpIR() const override {
         std::string str;
@@ -666,6 +581,10 @@ class RelExpAST : public BaseAST {
                 assert(false);
         }
     }
+
+    std::string getIdent() const override {
+        return std::string();
+    }
 };
 
 // EqExp Auxiliary data
@@ -681,29 +600,6 @@ class EqExpAST : public BaseAST {
     EqType type;
     std::unique_ptr<BaseAST> relexp;
     std::unique_ptr<BaseAST> eqexp;
-    // std::string eqop;
-
-    // void Dump() const override {
-    //     std::cout << "EqExpAST { ";
-    //     switch(type) {
-    //         case Eq_RelExp:
-    //             relexp->Dump();
-    //             break;
-    //         case Eq_EQExp:
-    //             eqexp->Dump();
-    //             std::cout << " == ";
-    //             relexp->Dump();
-    //             break;
-    //         case Eq_NEQExp:
-    //             eqexp->Dump();
-    //             std::cout << " != ";
-    //             relexp->Dump();
-    //             break;
-    //         default:
-    //             assert(false);
-    //     }
-    //     std::cout << " }";
-    // }
 
     std::string DumpIR() const override {
         std::string str;
@@ -759,6 +655,10 @@ class EqExpAST : public BaseAST {
                 assert(false);
         }
     }
+
+    std::string getIdent() const override {
+        return std::string();
+    }
 };
 
 // LAndExp Auxiliary data
@@ -773,23 +673,6 @@ class LAndExpAST : public BaseAST {
     LAndType type;
     std::unique_ptr<BaseAST> eqexp;
     std::unique_ptr<BaseAST> landexp;
-
-    // void Dump() const override {
-    //     std::cout << "LAndExpAST { ";
-    //     switch(type) {
-    //         case LAnd_EqExp:
-    //             eqexp->Dump();
-    //             break;
-    //         case LAnd_ANDExp:
-    //             landexp->Dump();
-    //             std::cout << " && ";
-    //             eqexp->Dump();
-    //             break;
-    //         default:
-    //             assert(false);
-    //     }
-    //     std::cout << " }";
-    // }
 
     std::string DumpIR() const override {
         std::string str;
@@ -838,7 +721,11 @@ class LAndExpAST : public BaseAST {
     int ConstCalc() const override {
         if(type == LAnd_EqExp)
             return eqexp->ConstCalc();
-        return landexp->ConstCalc() & eqexp->ConstCalc();
+        return landexp->ConstCalc() && eqexp->ConstCalc();
+    }
+
+    std::string getIdent() const override {
+        return std::string();
     }
 };
 
@@ -854,23 +741,6 @@ class LOrExpAST : public BaseAST {
     LOrType type;
     std::unique_ptr<BaseAST> landexp;
     std::unique_ptr<BaseAST> lorexp;
-
-    // void Dump() const override {
-    //     std::cout << "LOrExpAST { ";
-    //     switch(type) {
-    //         case LOr_LAndExp:
-    //             landexp->Dump();
-    //             break;
-    //         case LOr_ORExp:
-    //             lorexp->Dump();
-    //             std::cout << " || ";
-    //             landexp->Dump();
-    //             break;
-    //         default:
-    //             assert(false);
-    //     }
-    //     std::cout << " }";
-    // }
 
     std::string DumpIR() const override {
         std::string str;
@@ -919,23 +789,38 @@ class LOrExpAST : public BaseAST {
     int ConstCalc() const override {
         if(type == LOr_LAndExp)
             return landexp->ConstCalc();
-        return lorexp->ConstCalc() | landexp->ConstCalc();
+        return lorexp->ConstCalc() || landexp->ConstCalc();
     }
+
+    std::string getIdent() const override {
+        return std::string();
+    }
+};
+
+// Decl Auxiliary data
+enum DeclType {
+    Decl_Const,
+    Decl_Var
 };
 
 // Decl
 class DeclAST : public BaseAST {
   public:
-    std::unique_ptr<BaseAST> constdeclexp;
+    DeclType type;
+    std::unique_ptr<BaseAST> exp;
 
     std::string DumpIR() const override {
         std::string str;
-        str += constdeclexp->DumpIR();
+        str = exp->DumpIR();
         return str;
     }
 
     int ConstCalc() const override {
         return 0;
+    }
+
+    std::string getIdent() const override {
+        return std::string();
     }
 };
 
@@ -956,6 +841,10 @@ class ConstDeclAST : public BaseAST {
     int ConstCalc() const override {
         return 0;
     }
+
+    std::string getIdent() const override {
+        return std::string();
+    }
 };
 
 // BType
@@ -971,6 +860,10 @@ class BTypeAST : public BaseAST {
     int ConstCalc() const override {
         return 0;
     }
+
+    std::string getIdent() const override {
+        return std::string();
+    }
 };
 
 // ConstDef
@@ -982,12 +875,16 @@ class ConstDefAST : public BaseAST {
     std::string DumpIR() const override {
         std::string str;
         int const_val = ConstCalc();
-        symbol_table[ident] = const_val;
+        symbol_table[ident] = symbol_t{const_val, symbol_tag::Symbol_Const};
         return str;
     }
 
     int ConstCalc() const override {
         return constinitval->ConstCalc();
+    }
+
+    std::string getIdent() const override {
+        return std::string();
     }
 };
 
@@ -1003,6 +900,10 @@ class ConstInitValAST : public BaseAST {
 
     int ConstCalc() const override {
         return constexp->ConstCalc();
+    }
+
+    std::string getIdent() const override {
+        return std::string();
     }
 };
 
@@ -1037,6 +938,10 @@ class BlockItemAST : public BaseAST {
     int ConstCalc() const override {
         return 0;
     }
+
+    std::string getIdent() const override {
+        return std::string();
+    }
 };
 
 // LVal
@@ -1046,17 +951,36 @@ class LValAST : public BaseAST {
 
     std::string DumpIR() const override {
         std::string str;
-        str += "\t\%";
-        str += std::to_string(ast_i);
-        str += " = add 0, ";
-        str += std::to_string(symbol_table[ident]);
-        str += "\n";
-        ast_i++;
+        if(symbol_table.find(ident) == symbol_table.end()) {
+            str = ident;
+        }
+        else {
+            if(symbol_table[ident].tag == symbol_tag::Symbol_Const) {
+                str += "\t\%";
+                str += std::to_string(ast_i);
+                str += " = add 0, ";
+                str += std::to_string(symbol_table[ident].value);
+                str += "\n";
+                ast_i++;
+            }
+            else {
+                str += "\t\%";
+                str += std::to_string(ast_i);
+                str += " = load @";
+                str += ident;
+                str += "\n";
+                ast_i++;
+            }
+        }
         return str;
     }
 
     int ConstCalc() const override {
-        return symbol_table[ident];
+        return symbol_table[ident].value;
+    }
+
+    std::string getIdent() const override {
+        return ident;
     }
 };
 
@@ -1072,5 +996,91 @@ class ConstExpAST : public BaseAST {
 
     int ConstCalc() const override {
         return exp->ConstCalc();
+    }
+
+    std::string getIdent() const override {
+        return std::string();
+    }
+};
+
+// VarDecl
+class VarDeclAST : public BaseAST {
+  public:
+    std::unique_ptr<BaseAST> btype;
+    std::unique_ptr<std::vector<std::unique_ptr<BaseAST> > > vardefvec;
+
+    std::string DumpIR() const override {
+        std::string str;
+        size_t vec_size = (*vardefvec).size();
+        for (int i = vec_size - 1; i >= 0; i--)
+            str += (*vardefvec)[i]->DumpIR();
+        return str;
+    }
+
+    int ConstCalc() const override {
+        return 0;
+    }
+
+    std::string getIdent() const override {
+        return std::string();
+    }
+};
+
+// VarDef Auxiliary data
+enum VarDefType {
+    VarDef_NO_Init,
+    VarDef_Init
+};
+
+// VarDef
+class VarDefAST : public BaseAST {
+  public:
+    VarDefType type;
+    std::string ident;
+    std::unique_ptr<BaseAST> initval;
+
+    std::string DumpIR() const override {
+        std::string str;
+        str += "\t@";
+        str += ident;
+        str += " = alloc i32\n";
+        if(type == VarDef_Init) {
+            str += initval->DumpIR();
+            str += "\tstore \%";
+            str += std::to_string(ast_i - 1);
+            str += ", @";
+            str += ident;
+            str += "\n";
+        }
+        symbol_table[ident] = symbol_t{-1, symbol_tag::Symbol_Var};
+        return str;
+    }
+
+    int ConstCalc() const override {
+        return 0;
+    }
+
+    std::string getIdent() const override {
+        return std::string();
+    }
+};
+
+// InitVal
+class InitValAST : public BaseAST {
+  public:
+    std::unique_ptr<BaseAST> exp;
+
+    std::string DumpIR() const override {
+        std::string str;
+        str += exp->DumpIR();
+        return str;
+    }
+
+    int ConstCalc() const override {
+        return 0;
+    }
+
+    std::string getIdent() const override {
+        return std::string();
     }
 };
