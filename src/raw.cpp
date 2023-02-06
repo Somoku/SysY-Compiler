@@ -120,6 +120,18 @@ void Visit(const koopa_raw_value_t &value, int st_offset, int &st_id) {
       stack_offset[value] = st_id;
       st_id += 4;
       break;
+    case KOOPA_RVT_STORE:
+      Visit(kind.data.store, st_id);
+      break;
+    case KOOPA_RVT_LOAD:
+      stack_offset[value] = Visit(kind.data.load);
+      break;
+    case KOOPA_RVT_ALLOC:
+      // 暂时不处理 alloc, 为避免报错
+      break;
+    case KOOPA_RVT_GLOBAL_ALLOC:
+      // 暂时不处理 alloc, 为避免报错
+      break;
     default:
       // 其他类型暂时遇不到
       assert(false);
@@ -279,6 +291,30 @@ void Visit(const koopa_raw_binary_t &binary, int &st_id) {
     default:
       assert(false);
   }
+}
+
+// 访问 store 指令
+void Visit(const koopa_raw_store_t &store, int &st_id) {
+  if(store.value->kind.tag == KOOPA_RVT_INTEGER)
+    std::cout << "\tli t0, " << store.value->kind.data.integer.value << std::endl;
+  else {
+    std::cout << "\tli t6, " << stack_offset[store.value] << std::endl;
+    std::cout << "\tadd t6, sp, t6\n";
+    std::cout << "\tlw t0, (t6)\n";
+  }
+
+  if(stack_offset.find(store.dest) == stack_offset.end()) {
+    stack_offset[store.dest] = st_id;
+    st_id += 4;
+  }
+  std::cout << "\tli t6, " << stack_offset[store.dest] << std::endl;
+  std::cout << "\tadd t6, sp, t6\n";
+  std::cout << "\tsw t0, (t6)\n";
+}
+
+// 访问 load 指令
+int Visit(const koopa_raw_load_t &load) {
+  return stack_offset[load.src];
 }
 
 // 访问 raw slice, 获取存在返回值的指令个数
