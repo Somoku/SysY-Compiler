@@ -98,6 +98,7 @@ void Visit(const koopa_raw_basic_block_t &bb, int st_offset, int &st_id) {
   // 执行一些其他的必要操作
   // ...
   // 访问所有指令
+  std::cout << (bb->name + 1) << ":\n";
   Visit(bb->insts, st_offset, st_id);
 }
 
@@ -131,6 +132,12 @@ void Visit(const koopa_raw_value_t &value, int st_offset, int &st_id) {
       break;
     case KOOPA_RVT_GLOBAL_ALLOC:
       // 暂时不处理 alloc, 为避免报错
+      break;
+    case KOOPA_RVT_BRANCH:
+      Visit(kind.data.branch);
+      break;
+    case KOOPA_RVT_JUMP:
+      Visit(kind.data.jump);
       break;
     default:
       // 其他类型暂时遇不到
@@ -315,6 +322,24 @@ void Visit(const koopa_raw_store_t &store, int &st_id) {
 // 访问 load 指令
 int Visit(const koopa_raw_load_t &load) {
   return stack_offset[load.src];
+}
+
+// 访问 branch 指令
+void Visit(const koopa_raw_branch_t &branch) {
+  if(branch.cond->kind.tag == KOOPA_RVT_INTEGER)
+    std::cout << "\tli t0, " << branch.cond->kind.data.integer.value << std::endl;
+  else {
+    std::cout << "\tli t6, " << stack_offset[branch.cond] << std::endl;
+    std::cout << "\tadd t6, sp, t6\n";
+    std::cout << "\tlw t0, (t6)\n";
+  }
+  std::cout << "\tbnez t0, " << (branch.true_bb->name + 1) << std::endl;
+  std::cout << "\tj " << (branch.false_bb->name + 1) << std::endl;
+}
+
+// 访问 jump 指令
+void Visit(const koopa_raw_jump_t &jump) {
+  std::cout << "\tj " << (jump.target->name + 1) << std::endl;
 }
 
 // 访问 raw slice, 获取存在返回值的指令个数

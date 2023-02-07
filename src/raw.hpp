@@ -14,6 +14,8 @@ void Visit(const koopa_raw_return_t &ret, int st_offset);
 void Visit(const koopa_raw_integer_t &integer);
 void Visit(const koopa_raw_binary_t &binary, int &st_id);
 void Visit(const koopa_raw_store_t &store, int &st_id);
+void Visit(const koopa_raw_branch_t &branch);
+void Visit(const koopa_raw_jump_t &jump);
 int Visit(const koopa_raw_load_t &load);
 int get_st_num(const koopa_raw_slice_t &slice);
 int get_st_num(const koopa_raw_value_t &value);

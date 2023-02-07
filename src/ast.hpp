@@ -9,6 +9,8 @@
 #include "symbol.hpp"
 
 static int ast_i = 0;
+static int block_id = 0;
+static bool block_ret = false;
 extern symbol_table_list_elem_t *curr_symbol_table;
 
 // Base of all AST
@@ -121,32 +123,238 @@ class BlockAST : public BaseAST {
 
 // Stmt Auxiliary data
 enum StmtType {
-    Stmt_Ret,
-    Stmt_Lval,
-    Stmt_Exp,
-    Stmt_Null,
-    Stmt_Block,
-    Stmt_Ret_Null
+    Stmt_Open,
+    Stmt_Closed
 };
 
 // Stmt
 class StmtAST : public BaseAST {
   public:
     StmtType type;
+    std::unique_ptr<BaseAST> stmt;
+    
+    std::string DumpIR() const override {
+        std::string str;
+        str += stmt->DumpIR();
+        return str;
+    }
+
+    int ConstCalc() const override {
+        return 0;
+    }
+
+    std::string getIdent() const override {
+        return std::string();
+    }
+};
+
+// OpenStmt Auxiliary data
+enum OpenStmtType {
+    Open_If,
+    Open_Else
+};
+
+// OpenStmt
+class OpenStmtAST : public BaseAST {
+  public:
+    OpenStmtType type;
+    std::unique_ptr<BaseAST> exp;
+    std::unique_ptr<BaseAST> stmt;
+    std::unique_ptr<BaseAST> openstmt;
+
+    std::string DumpIR() const override {
+        std::string str;
+        int then_id = 0;
+        int else_id = 0;
+        int end_id = 0;
+        bool then_ret = false;
+        bool else_ret = false;
+        if(type == Open_If) {
+            then_id = block_id++;
+            end_id = block_id++;
+            str += exp->DumpIR();
+            str += "\tbr \%";
+            str += std::to_string(ast_i - 1);
+            str += ", \%block_";
+            str += std::to_string(then_id);
+            str += ", \%block_";
+            str += std::to_string(end_id);
+            str += "\n";
+            str += "\%block_";
+            str += std::to_string(then_id);
+            str += ":\n";
+            block_ret = false;
+            str += stmt->DumpIR();
+            if(!block_ret) {
+                str += "\tjump \%block_";
+                str += std::to_string(end_id);
+                str += "\n";
+            }
+            str += "\%block_";
+            str += std::to_string(end_id);
+            str += ":\n";
+            block_ret = false;
+        }
+        else {
+            then_id = block_id++;
+            else_id = block_id++;
+            end_id = block_id++;
+            str += exp->DumpIR();
+            str += "\tbr \%";
+            str += std::to_string(ast_i - 1);
+            str += ", \%block_";
+            str += std::to_string(then_id);
+            str += ", \%block_";
+            str += std::to_string(else_id);
+            str += "\n";
+            str += "\%block_";
+            str += std::to_string(then_id);
+            str += ":\n";
+            block_ret = false;
+            str += stmt->DumpIR();
+            then_ret = block_ret;
+            if(!block_ret) {
+                str += "\tjump \%block_";
+                str += std::to_string(end_id);
+                str += "\n";
+            }
+            str += "\%block_";
+            str += std::to_string(else_id);
+            str += ":\n";
+            block_ret = false;
+            str += openstmt->DumpIR();
+            else_ret = block_ret;
+            if(!block_ret) {
+                str += "\tjump \%block_";
+                str += std::to_string(end_id);
+                str += "\n";
+            }
+            if(!then_ret || !else_ret){
+                str += "\%block_";
+                str += std::to_string(end_id);
+                str += ":\n";
+                block_ret = false;
+            }
+        }
+        return str;
+    }
+
+    int ConstCalc() const override {
+        return 0;
+    }
+
+    std::string getIdent() const override {
+        return std::string();
+    }
+};
+
+// ClosedStmt Auxiliary data
+enum ClosedStmtType {
+    Closed_NonIf,
+    Closed_If
+};
+
+// ClosedStmt
+class ClosedStmtAST : public BaseAST {
+  public:
+    ClosedStmtType type;
+    std::unique_ptr<BaseAST> stmt;
+    std::unique_ptr<BaseAST> exp;
+    std::unique_ptr<BaseAST> closedstmt;
+
+    std::string DumpIR() const override {
+        std::string str;
+        int then_id = 0;
+        int else_id = 0;
+        int end_id = 0;
+        bool then_ret = false;
+        bool else_ret = false;
+        if(type == Closed_NonIf)
+            str += stmt->DumpIR();
+        else {
+            then_id = block_id++;
+            else_id = block_id++;
+            end_id = block_id++;
+            str += exp->DumpIR();
+            str += "\tbr \%";
+            str += std::to_string(ast_i - 1);
+            str += ", \%block_";
+            str += std::to_string(then_id);
+            str += ", \%block_";
+            str += std::to_string(else_id);
+            str += "\n";
+            str += "\%block_";
+            str += std::to_string(then_id);
+            str += ":\n";
+            block_ret = false;
+            str += stmt->DumpIR();
+            then_ret = block_ret;
+            if(!block_ret) {
+                str += "\tjump \%block_";
+                str += std::to_string(end_id);
+                str += "\n";   
+            }
+            str += "\%block_";
+            str += std::to_string(else_id);
+            str += ":\n";
+            block_ret = false;
+            str += closedstmt->DumpIR();
+            else_ret = block_ret;
+            if(!block_ret) {
+                str += "\tjump \%block_";
+                str += std::to_string(end_id);
+                str += "\n"; 
+            }
+            if(!then_ret || !else_ret){
+                str += "\%block_";
+                str += std::to_string(end_id);
+                str += ":\n";
+                block_ret = false;
+            }
+        }
+        return str;
+    }
+
+    int ConstCalc() const override {
+        return 0;
+    }
+
+    std::string getIdent() const override {
+        return std::string();
+    }
+};
+
+// NonIfStmt Auxiliary data
+enum NonIfStmtType {
+    NonIf_Ret,
+    NonIf_Lval,
+    NonIf_Exp,
+    NonIf_Null,
+    NonIf_Block,
+    NonIf_Ret_Null,
+    NonIf_If,
+    NonIf_If_Else
+};
+
+// NonIfStmt
+class NonIfStmtAST : public BaseAST {
+  public:
+    NonIfStmtType type;
     std::unique_ptr<BaseAST> exp;
     std::unique_ptr<BaseAST> lval;
 
     std::string DumpIR() const override {
         std::string str;
         switch(type) {
-            case Stmt_Ret:
+            case NonIf_Ret:
                 str += exp->DumpIR();
                 str += "\tret ";
                 str += "\%";
                 str += std::to_string(ast_i - 1);
                 str += "\n";
+                block_ret = true;
                 break;
-            case Stmt_Lval:
+            case NonIf_Lval:
                 str += exp->DumpIR();
                 str += "\tstore \%";
                 str += std::to_string(ast_i - 1);
@@ -154,16 +362,17 @@ class StmtAST : public BaseAST {
                 str += lval->getIdent();
                 str += "\n";
                 break;
-            case Stmt_Exp:
+            case NonIf_Exp:
                 str += exp->DumpIR();
                 break;
-            case Stmt_Null:
+            case NonIf_Null:
                 break;
-            case Stmt_Block:
+            case NonIf_Block:
                 str += exp->DumpIR();
                 break;
-            case Stmt_Ret_Null:
+            case NonIf_Ret_Null:
                 str += "\tret\n";
+                block_ret = true;
                 break;
             default:
                 assert(false);
@@ -935,6 +1144,8 @@ class BlockItemAST : public BaseAST {
 
     std::string DumpIR() const override {
         std::string str;
+        if(block_ret)
+            return str;
         switch(type) {
             case BlockItem_Decl:
                 str += decl->DumpIR();
