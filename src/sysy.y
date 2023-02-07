@@ -101,14 +101,6 @@ FuncType
   }
   ;
 
-/* Block
-  : '{' Stmt '}' {
-    auto ast = new BlockAST();
-    ast->stmt = unique_ptr<BaseAST>($2);
-    $$ = ast;
-  }
-  ; */
-
 Stmt
   : RETURN Exp ';' {
     auto ast = new StmtAST();
@@ -121,6 +113,30 @@ Stmt
     ast->lval = unique_ptr<BaseAST>($1);
     ast->exp = unique_ptr<BaseAST>($3);
     ast->type = StmtType::Stmt_Lval;
+    $$ = ast;
+  }
+  | Exp ';' {
+    auto ast = new StmtAST();
+    ast->exp = unique_ptr<BaseAST>($1);
+    ast->type = StmtType::Stmt_Exp;
+    $$ = ast;
+  }
+  | ';' {
+    auto ast = new StmtAST();
+    ast->exp = nullptr;
+    ast->type = StmtType::Stmt_Null;
+    $$ = ast;
+  }
+  | Block {
+    auto ast = new StmtAST();
+    ast->exp = unique_ptr<BaseAST>($1);
+    ast->type = StmtType::Stmt_Block;
+    $$ = ast;
+  }
+  | RETURN ';' {
+    auto ast = new StmtAST();
+    ast->exp = nullptr;
+    ast->type = StmtType::Stmt_Ret_Null;
     $$ = ast;
   }
   ;

@@ -6,19 +6,10 @@
 #include <cassert>
 #include <vector>
 #include <unordered_map>
+#include "symbol.hpp"
 
 static int ast_i = 0;
-
-enum symbol_tag {
-    Symbol_Const,
-    Symbol_Var
-};
-
-typedef struct {
-    int value;
-    symbol_tag tag;
-} symbol_t;
-static std::unordered_map<std::string, symbol_t> symbol_table;
+extern symbol_table_list_elem_t *curr_symbol_table;
 
 // Base of all AST
 class BaseAST {
@@ -61,6 +52,7 @@ class FuncDefAST : public BaseAST {
         str += "(): ";
         str += func_type->DumpIR();
         str += "{\n";
+        str += "\%entry:\n";
         str += block->DumpIR();
         str += "}\n";
         return str;
@@ -108,12 +100,13 @@ class BlockAST : public BaseAST {
 
     std::string DumpIR() const override {
         std::string str;
-        str += "\%entry:\n";
-        // str += blockitems->DumpIR();
-        size_t vec_size = (*blockitemvec).size();
-        for (int i = vec_size - 1; i >= 0; i--)
-            str += (*blockitemvec)[i]->DumpIR();
-        str += "\n";
+        if(type == Block_Items) {
+            create_symbol_table();
+            size_t vec_size = (*blockitemvec).size();
+            for (int i = vec_size - 1; i >= 0; i--)
+                str += (*blockitemvec)[i]->DumpIR();
+            delete_symbol_table();
+        }
         return str;
     }
 
@@ -129,7 +122,11 @@ class BlockAST : public BaseAST {
 // Stmt Auxiliary data
 enum StmtType {
     Stmt_Ret,
-    Stmt_Lval
+    Stmt_Lval,
+    Stmt_Exp,
+    Stmt_Null,
+    Stmt_Block,
+    Stmt_Ret_Null
 };
 
 // Stmt
@@ -141,20 +138,35 @@ class StmtAST : public BaseAST {
 
     std::string DumpIR() const override {
         std::string str;
-        if(type == Stmt_Ret) {
-            str += exp->DumpIR();
-            str += "\tret ";
-            str += "\%";
-            str += std::to_string(ast_i - 1);
-            str += "\n";
-        }
-        else {
-            str += exp->DumpIR();
-            str += "\tstore \%";
-            str += std::to_string(ast_i - 1);
-            str += ", @";
-            str += lval->getIdent();
-            str += "\n";
+        switch(type) {
+            case Stmt_Ret:
+                str += exp->DumpIR();
+                str += "\tret ";
+                str += "\%";
+                str += std::to_string(ast_i - 1);
+                str += "\n";
+                break;
+            case Stmt_Lval:
+                str += exp->DumpIR();
+                str += "\tstore \%";
+                str += std::to_string(ast_i - 1);
+                str += ", @";
+                str += lval->getIdent();
+                str += "\n";
+                break;
+            case Stmt_Exp:
+                str += exp->DumpIR();
+                break;
+            case Stmt_Null:
+                break;
+            case Stmt_Block:
+                str += exp->DumpIR();
+                break;
+            case Stmt_Ret_Null:
+                str += "\tret\n";
+                break;
+            default:
+                assert(false);
         }
         return str;
     }
@@ -875,7 +887,8 @@ class ConstDefAST : public BaseAST {
     std::string DumpIR() const override {
         std::string str;
         int const_val = ConstCalc();
-        symbol_table[ident] = symbol_t{const_val, symbol_tag::Symbol_Const};
+        (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
+            symbol_t{const_val, symbol_tag::Symbol_Const};
         return str;
     }
 
@@ -951,15 +964,20 @@ class LValAST : public BaseAST {
 
     std::string DumpIR() const override {
         std::string str;
-        if(symbol_table.find(ident) == symbol_table.end()) {
+        symbol_table_list_elem_t *target_symbol_table = search_symbol_table(ident);
+        if(target_symbol_table == nullptr) {
+            std::cerr << "Error: Can't find ident." << std::endl;
             str = ident;
         }
         else {
-            if(symbol_table[ident].tag == symbol_tag::Symbol_Const) {
+            symbol_t symbol = (*(target_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident];
+            int symbol_num = target_symbol_table->symbol_table_ptr->symbol_table_num;
+            if(symbol.tag == 
+                symbol_tag::Symbol_Const) {
                 str += "\t\%";
                 str += std::to_string(ast_i);
                 str += " = add 0, ";
-                str += std::to_string(symbol_table[ident].value);
+                str += std::to_string(symbol.value);
                 str += "\n";
                 ast_i++;
             }
@@ -968,6 +986,8 @@ class LValAST : public BaseAST {
                 str += std::to_string(ast_i);
                 str += " = load @";
                 str += ident;
+                str += "_";
+                str += std::to_string(symbol_num);
                 str += "\n";
                 ast_i++;
             }
@@ -976,11 +996,19 @@ class LValAST : public BaseAST {
     }
 
     int ConstCalc() const override {
-        return symbol_table[ident].value;
+        symbol_table_list_elem_t *target_symbol_table = search_symbol_table(ident);
+        assert(target_symbol_table != nullptr);
+        return (*(target_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident].value;
     }
 
     std::string getIdent() const override {
-        return ident;
+        std::string str;
+        symbol_table_list_elem_t *target_symbol_table = search_symbol_table(ident);
+        int symbol_num = target_symbol_table->symbol_table_ptr->symbol_table_num;
+        str += ident;
+        str += "_";
+        str += std::to_string(symbol_num);
+        return str;
     }
 };
 
@@ -1043,6 +1071,8 @@ class VarDefAST : public BaseAST {
         std::string str;
         str += "\t@";
         str += ident;
+        str += "_";
+        str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
         str += " = alloc i32\n";
         if(type == VarDef_Init) {
             str += initval->DumpIR();
@@ -1050,9 +1080,12 @@ class VarDefAST : public BaseAST {
             str += std::to_string(ast_i - 1);
             str += ", @";
             str += ident;
+            str += "_";
+            str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
             str += "\n";
         }
-        symbol_table[ident] = symbol_t{-1, symbol_tag::Symbol_Var};
+        (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
+            symbol_t{-1, symbol_tag::Symbol_Var};
         return str;
     }
 
