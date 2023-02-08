@@ -42,7 +42,7 @@ using namespace std;
 
 // lexer 返回的所有 token 种类的声明
 // 注意 IDENT 和 INT_CONST 会返回 token 的值, 分别对应 str_val 和 int_val
-%token INT RETURN CONST IF ELSE
+%token INT RETURN CONST IF ELSE WHILE BREAK CONTINUE
 %token LT GT LE GE EQ NEQ
 %token AND OR
 %token <str_val> IDENT
@@ -132,6 +132,13 @@ OpenStmt
     ast->type = OpenStmtType::Open_Else;
     $$ = ast;
   }
+  | WHILE '(' Exp ')' OpenStmt {
+    auto ast = new OpenStmtAST();
+    ast->exp = unique_ptr<BaseAST>($3);
+    ast->stmt = unique_ptr<BaseAST>($5);
+    ast->type = OpenStmtType::Open_While;
+    $$ = ast;
+  }
   ;
 
 ClosedStmt
@@ -147,6 +154,13 @@ ClosedStmt
     ast->stmt = unique_ptr<BaseAST>($5);
     ast->closedstmt = unique_ptr<BaseAST>($7);
     ast->type = ClosedStmtType::Closed_If;
+    $$ = ast;
+  }
+  | WHILE '(' Exp ')' ClosedStmt {
+    auto ast = new ClosedStmtAST();
+    ast->exp = unique_ptr<BaseAST>($3);
+    ast->stmt = unique_ptr<BaseAST>($5);
+    ast->type = ClosedStmtType::Closed_While;
     $$ = ast;
   }
   ;
@@ -187,6 +201,16 @@ NonIfStmt
     auto ast = new NonIfStmtAST();
     ast->exp = nullptr;
     ast->type = NonIfStmtType::NonIf_Ret_Null;
+    $$ = ast;
+  }
+  | BREAK ';' {
+    auto ast = new NonIfStmtAST();
+    ast->type = NonIfStmtType::NonIf_Break;
+    $$ = ast;
+  }
+  | CONTINUE ';' {
+    auto ast = new NonIfStmtAST();
+    ast->type = NonIfStmtType::NonIf_Continue;
     $$ = ast;
   }
   ;

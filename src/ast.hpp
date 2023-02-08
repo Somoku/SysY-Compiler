@@ -11,7 +11,10 @@
 static int ast_i = 0;
 static int block_id = 0;
 static int logical_id = 0;
+static int while_id = 0;
 static bool block_ret = false;
+static bool block_jump = false;
+static std::vector<int> while_id_vec;
 extern symbol_table_list_elem_t *curr_symbol_table;
 
 // Base of all AST
@@ -152,7 +155,8 @@ class StmtAST : public BaseAST {
 // OpenStmt Auxiliary data
 enum OpenStmtType {
     Open_If,
-    Open_Else
+    Open_Else,
+    Open_While
 };
 
 // OpenStmt
@@ -168,74 +172,121 @@ class OpenStmtAST : public BaseAST {
         int then_id = 0;
         int else_id = 0;
         int end_id = 0;
+        int while_block_id = 0;
         bool then_ret = false;
         bool else_ret = false;
-        if(type == Open_If) {
-            then_id = block_id++;
-            end_id = block_id++;
-            str += exp->DumpIR();
-            str += "\tbr \%";
-            str += std::to_string(ast_i - 1);
-            str += ", \%block_";
-            str += std::to_string(then_id);
-            str += ", \%block_";
-            str += std::to_string(end_id);
-            str += "\n";
-            str += "\%block_";
-            str += std::to_string(then_id);
-            str += ":\n";
-            block_ret = false;
-            str += stmt->DumpIR();
-            if(!block_ret) {
-                str += "\tjump \%block_";
+        switch(type) {
+            case Open_If:
+                then_id = block_id++;
+                end_id = block_id++;
+                str += exp->DumpIR();
+                str += "\tbr \%";
+                str += std::to_string(ast_i - 1);
+                str += ", \%block_";
+                str += std::to_string(then_id);
+                str += ", \%block_";
                 str += std::to_string(end_id);
                 str += "\n";
-            }
-            str += "\%block_";
-            str += std::to_string(end_id);
-            str += ":\n";
-            block_ret = false;
-        }
-        else {
-            then_id = block_id++;
-            else_id = block_id++;
-            end_id = block_id++;
-            str += exp->DumpIR();
-            str += "\tbr \%";
-            str += std::to_string(ast_i - 1);
-            str += ", \%block_";
-            str += std::to_string(then_id);
-            str += ", \%block_";
-            str += std::to_string(else_id);
-            str += "\n";
-            str += "\%block_";
-            str += std::to_string(then_id);
-            str += ":\n";
-            block_ret = false;
-            str += stmt->DumpIR();
-            then_ret = block_ret;
-            if(!block_ret) {
-                str += "\tjump \%block_";
-                str += std::to_string(end_id);
-                str += "\n";
-            }
-            str += "\%block_";
-            str += std::to_string(else_id);
-            str += ":\n";
-            block_ret = false;
-            str += openstmt->DumpIR();
-            else_ret = block_ret;
-            if(!block_ret) {
-                str += "\tjump \%block_";
-                str += std::to_string(end_id);
-                str += "\n";
-            }
-            if(!then_ret || !else_ret){
+                str += "\%block_";
+                str += std::to_string(then_id);
+                str += ":\n";
+                block_ret = false;
+                block_jump = false;
+                str += stmt->DumpIR();
+                if(!block_ret && !block_jump) {
+                    str += "\tjump \%block_";
+                    str += std::to_string(end_id);
+                    str += "\n";
+                }
                 str += "\%block_";
                 str += std::to_string(end_id);
                 str += ":\n";
                 block_ret = false;
-            }
+                block_jump = false;
+                break;
+            case Open_Else:
+                then_id = block_id++;
+                else_id = block_id++;
+                end_id = block_id++;
+                str += exp->DumpIR();
+                str += "\tbr \%";
+                str += std::to_string(ast_i - 1);
+                str += ", \%block_";
+                str += std::to_string(then_id);
+                str += ", \%block_";
+                str += std::to_string(else_id);
+                str += "\n";
+                str += "\%block_";
+                str += std::to_string(then_id);
+                str += ":\n";
+                block_ret = false;
+                block_jump = false;
+                str += stmt->DumpIR();
+                then_ret = block_ret;
+                if(!block_ret && !block_jump) {
+                    str += "\tjump \%block_";
+                    str += std::to_string(end_id);
+                    str += "\n";
+                }
+                str += "\%block_";
+                str += std::to_string(else_id);
+                str += ":\n";
+                block_ret = false;
+                block_jump = false;
+                str += openstmt->DumpIR();
+                else_ret = block_ret;
+                if(!block_ret && !block_jump) {
+                    str += "\tjump \%block_";
+                    str += std::to_string(end_id);
+                    str += "\n";
+                }
+                if(!then_ret || !else_ret){
+                    str += "\%block_";
+                    str += std::to_string(end_id);
+                    str += ":\n";
+                    block_ret = false;
+                }
+                break;
+            case Open_While:
+                while_id_vec.push_back(while_id);
+                while_block_id = while_id;
+                while_id++;
+                str += "\tjump \%while_entry_";
+                str += std::to_string(while_block_id);
+                str += "\n";
+                str += "\%while_entry_";
+                str += std::to_string(while_block_id);
+                str += ":\n";
+                block_ret = false;
+                block_jump = false;
+                str += exp->DumpIR();
+                str += "\tbr \%";
+                str += std::to_string(ast_i - 1);
+                str += ", \%while_body_";
+                str += std::to_string(while_block_id);
+                str += ", \%while_end_";
+                str += std::to_string(while_block_id);
+                str += "\n";
+                str += "\%while_body_";
+                str += std::to_string(while_block_id);
+                str += ":\n";
+                block_ret = false;
+                block_jump = false;
+                str += openstmt->DumpIR();
+                if(!block_ret && !block_jump){
+                    str += "\tjump \%while_entry_";
+                    str += std::to_string(while_block_id);
+                    str += "\n";
+                }
+                while_id_vec.pop_back();
+                str += "\%while_end_";
+                str += std::to_string(while_block_id);
+                str += ":\n";
+                block_ret = false;
+                block_jump = false;
+                break;
+            default:
+                assert(false);
         }
         return str;
     }
@@ -252,7 +303,8 @@ class OpenStmtAST : public BaseAST {
 // ClosedStmt Auxiliary data
 enum ClosedStmtType {
     Closed_NonIf,
-    Closed_If
+    Closed_If,
+    Closed_While
 };
 
 // ClosedStmt
@@ -268,50 +320,97 @@ class ClosedStmtAST : public BaseAST {
         int then_id = 0;
         int else_id = 0;
         int end_id = 0;
+        int while_block_id = 0;
         bool then_ret = false;
         bool else_ret = false;
-        if(type == Closed_NonIf)
-            str += stmt->DumpIR();
-        else {
-            then_id = block_id++;
-            else_id = block_id++;
-            end_id = block_id++;
-            str += exp->DumpIR();
-            str += "\tbr \%";
-            str += std::to_string(ast_i - 1);
-            str += ", \%block_";
-            str += std::to_string(then_id);
-            str += ", \%block_";
-            str += std::to_string(else_id);
-            str += "\n";
-            str += "\%block_";
-            str += std::to_string(then_id);
-            str += ":\n";
-            block_ret = false;
-            str += stmt->DumpIR();
-            then_ret = block_ret;
-            if(!block_ret) {
-                str += "\tjump \%block_";
-                str += std::to_string(end_id);
-                str += "\n";   
-            }
-            str += "\%block_";
-            str += std::to_string(else_id);
-            str += ":\n";
-            block_ret = false;
-            str += closedstmt->DumpIR();
-            else_ret = block_ret;
-            if(!block_ret) {
-                str += "\tjump \%block_";
-                str += std::to_string(end_id);
-                str += "\n"; 
-            }
-            if(!then_ret || !else_ret){
+        switch(type) {
+            case Closed_NonIf:
+                str += stmt->DumpIR();
+                break;
+            case Closed_If:
+                then_id = block_id++;
+                else_id = block_id++;
+                end_id = block_id++;
+                str += exp->DumpIR();
+                str += "\tbr \%";
+                str += std::to_string(ast_i - 1);
+                str += ", \%block_";
+                str += std::to_string(then_id);
+                str += ", \%block_";
+                str += std::to_string(else_id);
+                str += "\n";
                 str += "\%block_";
-                str += std::to_string(end_id);
+                str += std::to_string(then_id);
                 str += ":\n";
                 block_ret = false;
-            }
+                block_jump = false;
+                str += stmt->DumpIR();
+                then_ret = block_ret;
+                if(!block_ret && !block_jump) {
+                    str += "\tjump \%block_";
+                    str += std::to_string(end_id);
+                    str += "\n";   
+                }
+                str += "\%block_";
+                str += std::to_string(else_id);
+                str += ":\n";
+                block_ret = false;
+                block_jump = false;
+                str += closedstmt->DumpIR();
+                else_ret = block_ret;
+                if(!block_ret && !block_jump) {
+                    str += "\tjump \%block_";
+                    str += std::to_string(end_id);
+                    str += "\n"; 
+                }
+                if(!then_ret || !else_ret){
+                    str += "\%block_";
+                    str += std::to_string(end_id);
+                    str += ":\n";
+                    block_ret = false;
+                    block_jump = false;
+                }
+                break;
+            case Closed_While:
+                while_id_vec.push_back(while_id);
+                while_block_id = while_id;
+                while_id++;
+                str += "\tjump \%while_entry_";
+                str += std::to_string(while_block_id);
+                str += "\n";
+                str += "\%while_entry_";
+                str += std::to_string(while_block_id);
+                str += ":\n";
+                block_ret = false;
+                block_jump = false;
+                str += exp->DumpIR();
+                str += "\tbr \%";
+                str += std::to_string(ast_i - 1);
+                str += ", \%while_body_";
+                str += std::to_string(while_block_id);
+                str += ", \%while_end_";
+                str += std::to_string(while_block_id);
+                str += "\n";
+                str += "\%while_body_";
+                str += std::to_string(while_block_id);
+                str += ":\n";
+                block_ret = false;
+                block_jump = false;
+                str += stmt->DumpIR();
+                if(!block_ret && !block_jump){
+                    str += "\tjump \%while_entry_";
+                    str += std::to_string(while_block_id);
+                    str += "\n";
+                }
+                while_id_vec.pop_back();
+                str += "\%while_end_";
+                str += std::to_string(while_block_id);
+                str += ":\n";
+                block_ret = false;
+                block_jump = false;
+                break;
+            default:
+                assert(false);
         }
         return str;
     }
@@ -334,7 +433,9 @@ enum NonIfStmtType {
     NonIf_Block,
     NonIf_Ret_Null,
     NonIf_If,
-    NonIf_If_Else
+    NonIf_If_Else,
+    NonIf_Break,
+    NonIf_Continue
 };
 
 // NonIfStmt
@@ -346,6 +447,7 @@ class NonIfStmtAST : public BaseAST {
 
     std::string DumpIR() const override {
         std::string str;
+        int while_block_id = 0;
         switch(type) {
             case NonIf_Ret:
                 str += exp->DumpIR();
@@ -374,6 +476,28 @@ class NonIfStmtAST : public BaseAST {
             case NonIf_Ret_Null:
                 str += "\tret\n";
                 block_ret = true;
+                break;
+            case NonIf_Break:
+                if(while_id_vec.empty())
+                    break;
+                while_block_id = while_id_vec[while_id_vec.size() - 1];
+                if(!block_ret && !block_jump){
+                    str += "\tjump \%while_end_";
+                    str += std::to_string(while_block_id);
+                    str += "\n";
+                    block_jump = true;
+                }
+                break;
+            case NonIf_Continue:
+                if(while_id_vec.empty())
+                    break;
+                while_block_id = while_id_vec[while_id_vec.size() - 1];
+                if(!block_ret && !block_jump){
+                    str += "\tjump \%while_entry_";
+                    str += std::to_string(while_block_id);
+                    str += "\n";
+                    block_jump = true;
+                }
                 break;
             default:
                 assert(false);
@@ -1189,7 +1313,7 @@ class BlockItemAST : public BaseAST {
 
     std::string DumpIR() const override {
         std::string str;
-        if(block_ret)
+        if(block_ret || block_jump)
             return str;
         switch(type) {
             case BlockItem_Decl:
