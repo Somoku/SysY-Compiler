@@ -39,7 +39,6 @@ class CompUnitRootAST : public BaseAST {
         str += koopa_lib();
         str += compunit->DumpIR();
         return str;
-        // return compunit->DumpIR();
     }
 
     int ConstCalc() const override {
@@ -1632,10 +1631,16 @@ class LValAST : public BaseAST {
     std::string getIdent() const override {
         std::string str;
         symbol_table_list_elem_t *target_symbol_table = search_symbol_table(ident);
-        int symbol_num = target_symbol_table->symbol_table_ptr->symbol_table_num;
-        str += ident;
-        str += "_";
-        str += std::to_string(symbol_num);
+        if(target_symbol_table != nullptr) {
+            int symbol_num = target_symbol_table->symbol_table_ptr->symbol_table_num;
+            str += ident;
+            str += "_";
+            str += std::to_string(symbol_num);
+        }
+        else if(global_symbol_table.find(ident) != global_symbol_table.end())
+            str += ident;
+        else
+            std::cerr << "Error: Invalid ident.\n";
         return str;
     }
 };
