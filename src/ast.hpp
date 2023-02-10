@@ -1624,8 +1624,9 @@ class LValAST : public BaseAST {
 
     int ConstCalc() const override {
         symbol_table_list_elem_t *target_symbol_table = search_symbol_table(ident);
-        assert(target_symbol_table != nullptr);
-        return (*(target_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident].value;
+        if(target_symbol_table != nullptr)
+            return (*(target_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident].value;
+        return global_symbol_table[ident].value;
     }
 
     std::string getIdent() const override {
@@ -1661,7 +1662,7 @@ class ConstExpAST : public BaseAST {
 // VarDecl
 class VarDeclAST : public BaseAST {
   public:
-    std::unique_ptr<BaseAST> btype;
+    std::unique_ptr<BaseAST> functype;
     std::unique_ptr<std::vector<std::unique_ptr<BaseAST> > > vardefvec;
 
     std::string DumpIR() const override {
@@ -1754,7 +1755,7 @@ class InitValAST : public BaseAST {
     }
 
     int ConstCalc() const override {
-        return 0;
+        return exp->ConstCalc();
     }
 
     std::string getIdent() const override {

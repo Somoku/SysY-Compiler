@@ -643,9 +643,9 @@ ConstExp
   ;
 
 VarDecl
-  : BType VarDefVec ';' {
+  : FuncType VarDefVec ';' {
     auto ast = new VarDeclAST();
-    ast->btype = unique_ptr<BaseAST>($1);
+    ast->functype = unique_ptr<BaseAST>($1);
     ast->vardefvec = unique_ptr<vector<unique_ptr<BaseAST> > >($2);
     $$ = ast;
   }
