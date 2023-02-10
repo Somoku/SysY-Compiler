@@ -2,11 +2,18 @@
 
 #include <iostream>
 #include <memory>
+#include <string>
 #include <unordered_map>
+
+enum symbol_field {
+    Field_Global,
+    Field_Local
+};
 
 enum symbol_tag {
     Symbol_Const,
-    Symbol_Var
+    Symbol_Var,
+    Symbol_Func,
 };
 
 struct symbol_t {
@@ -40,3 +47,4 @@ struct symbol_table_list_elem_t {
 void create_symbol_table();
 void delete_symbol_table();
 symbol_table_list_elem_t *search_symbol_table(std::string ident);
+std::string koopa_lib();
