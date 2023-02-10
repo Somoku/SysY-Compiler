@@ -12,10 +12,13 @@ static int ast_i = 0;
 static int block_id = 0;
 static int logical_id = 0;
 static int while_id = 0;
+static int entry_id = 0;
 static bool block_ret = false;
 static bool block_jump = false;
+static symbol_field field = symbol_field::Field_Global;
 static std::vector<int> while_id_vec;
 extern symbol_table_list_elem_t *curr_symbol_table;
+extern std::unordered_map<std::string, symbol_t> global_symbol_table;
 
 // Base of all AST
 class BaseAST {
@@ -26,13 +29,17 @@ class BaseAST {
     virtual std::string getIdent() const = 0;
 };
 
-// CompUnit
-class CompUnitAST : public BaseAST {
+// CompUnitRoot
+class CompUnitRootAST : public BaseAST {
   public:
-    std::unique_ptr<BaseAST> func_def;
+    std::unique_ptr<BaseAST> compunit;
 
     std::string DumpIR() const override {
-        return func_def->DumpIR();
+        std::string str;
+        str += koopa_lib();
+        str += compunit->DumpIR();
+        return str;
+        // return compunit->DumpIR();
     }
 
     int ConstCalc() const override {
@@ -42,25 +49,127 @@ class CompUnitAST : public BaseAST {
     std::string getIdent() const override {
         return std::string();
     }
+};
+
+// CompUnit Auxiliary data
+enum CompUnitType {
+    CompUnit_SinFunc,
+    CompUnit_MulFunc,
+    CompUnit_SinDecl,
+    CompUnit_MulDecl
+};
+
+// CompUnit
+class CompUnitAST : public BaseAST {
+  public:
+    CompUnitType type;
+    std::unique_ptr<BaseAST> func_def;
+    std::unique_ptr<BaseAST> decl;
+    std::unique_ptr<BaseAST> compunit;
+
+    std::string DumpIR() const override {
+        std::string str;
+        switch(type) {
+            case CompUnit_SinFunc:
+                str += func_def->DumpIR();
+                field = symbol_field::Field_Global;
+                break;
+            case CompUnit_MulFunc:
+                field = symbol_field::Field_Global;
+                str += compunit->DumpIR();
+                field = symbol_field::Field_Global;
+                str += func_def->DumpIR();
+                field = symbol_field::Field_Global;
+                break;
+            case CompUnit_SinDecl:
+                str += decl->DumpIR();
+                field = symbol_field::Field_Global;
+                break;
+            case CompUnit_MulDecl:
+                field = symbol_field::Field_Global;
+                str += compunit->DumpIR();
+                field = symbol_field::Field_Global;
+                str += decl->DumpIR();
+                field = symbol_field::Field_Global;
+                break;
+            default:
+                assert(false);
+        }
+        return str;
+    }
+
+    int ConstCalc() const override {
+        return 0;
+    }
+
+    std::string getIdent() const override {
+        return std::string();
+    }
+};
+
+// FuncDef Auxiliary data
+enum FuncDefType {
+    FuncDef_Noparam,
+    FuncDef_Param
 };
 
 // FuncDef
 class FuncDefAST : public BaseAST {
   public:
+    FuncDefType type;
     std::unique_ptr<BaseAST> func_type;
     std::string ident;
+    std::unique_ptr<std::vector<std::unique_ptr<BaseAST> > > funcfparamvec;
     std::unique_ptr<BaseAST> block;
 
     std::string DumpIR() const override {
         std::string str;
-        str += "fun @";
-        str += ident;
-        str += "(): ";
-        str += func_type->DumpIR();
-        str += "{\n";
-        str += "\%entry:\n";
-        str += block->DumpIR();
-        str += "}\n";
+        global_symbol_table[ident] = symbol_t{func_type->ConstCalc(), symbol_tag::Symbol_Func};
+        field = symbol_field::Field_Local;
+        if(type == FuncDef_Noparam) {
+            str += "fun @";
+            str += ident;
+            str += "()";
+            str += func_type->DumpIR();
+            str += "{\n";
+            str += "\%entry_";
+            str += std::to_string(entry_id++);
+            str += ":\n";
+            block_ret = false;
+            block_jump = false;
+            str += block->DumpIR();
+            if(!block_ret && !block_jump)
+                str += "\tret\n";
+            str += "}\n";
+        }
+        else {
+            str += "fun @";
+            str += ident;
+            str += "(";
+            create_symbol_table();
+            size_t vec_size = funcfparamvec->size();
+            for(int i = vec_size - 1; i > 0; i--) {
+                str += (*funcfparamvec)[i]->getIdent();
+                str += ", ";
+            }
+            str += (*funcfparamvec)[0]->getIdent();
+            str += ")";
+            str += func_type->DumpIR();
+            str += " {\n";
+            str += "\%entry_";
+            str += std::to_string(entry_id++);
+            str += ":\n";
+            block_ret = false;
+            block_jump = false;
+            for(int i = vec_size - 1; i >= 0; i--)
+                str += (*funcfparamvec)[i]->DumpIR();
+            str += block->DumpIR();
+            if(!block_ret && !block_jump)
+                str += "\tret\n";
+            str += "}\n";
+            delete_symbol_table();
+        }
+        field = symbol_field::Field_Global;
         return str;
     }
 
@@ -73,13 +182,59 @@ class FuncDefAST : public BaseAST {
     }
 };
 
+// FuncType Auxiliary data
+enum FuncTypeType {
+    FuncType_INT,
+    FuncType_VOID
+};
+
 // FuncType
 class FuncTypeAST : public BaseAST {
   public:
-    std::string int_type;
+    FuncTypeType type;
 
     std::string DumpIR() const override {
-        std::string str("i32 ");
+        std::string str;
+        if(type == FuncType_INT)
+            str = ": i32 ";
+        else
+            str = " ";
+        return str;
+    }
+
+    int ConstCalc() const override {
+        return (int)type;
+    }
+
+    std::string getIdent() const override {
+        return std::string();
+    }
+};
+
+// FuncFParam
+class FuncFParamAST : public BaseAST {
+  public:
+    std::unique_ptr<BaseAST> btype;
+    std::string ident;
+
+    std::string DumpIR() const override {
+        std::string str;
+        std::string param_ident = std::string("param_") + ident + "_" +
+                                std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
+        str += "\t@";
+        str += ident;
+        str += "_";
+        str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
+        str += " = alloc i32\n";
+        str += "\tstore @";
+        str += param_ident;
+        str += ", @";
+        str += ident;
+        str += "_";
+        str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
+        str += "\n";
+        (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
+            symbol_t{-1, symbol_tag::Symbol_Var};
         return str;
     }
 
@@ -88,7 +243,14 @@ class FuncTypeAST : public BaseAST {
     }
 
     std::string getIdent() const override {
-        return std::string();
+        std::string str;
+        std::string param_ident = std::string("param_") + ident;
+        str += "@param_";
+        str += ident;
+        str += "_";
+        str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
+        str += ": i32";
+        return str;
     }
 };
 
@@ -596,7 +758,9 @@ class PrimaryExpAST : public BaseAST {
 // Unary Auxiliary Data
 enum UnaryType {
     Unary_PrimaryExp,
-    Unary_UnaryExp
+    Unary_UnaryExp,
+    Unary_NoParam,
+    Unary_Param
 };
 
 // UnaryExp
@@ -604,10 +768,14 @@ class UnaryExpAST : public BaseAST {
   public:
     UnaryType type;
     std::unique_ptr<BaseAST> exp;
+    std::string ident;
+    std::unique_ptr<std::vector<std::unique_ptr<BaseAST> > > funcrparamvec;
     char unaryop;
 
     std::string DumpIR() const override {
         std::string str;
+        std::vector<int> param_ast_i;
+        size_t vec_size = 0;
         switch(type) {
             case Unary_PrimaryExp:
                 str = exp->DumpIR();
@@ -629,6 +797,59 @@ class UnaryExpAST : public BaseAST {
                     str += std::to_string(ast_i - 1);
                     str += ", 0\n";
                     ast_i++;
+                }
+                break;
+            case Unary_NoParam:
+                if(global_symbol_table[ident].value == FuncTypeType::FuncType_VOID) {
+                    str += "\tcall @";
+                    str += ident;
+                    str += "()\n";
+                }
+                else {
+                    str += "\t\%";
+                    str += std::to_string(ast_i++);
+                    str += " = call @";
+                    str += ident;
+                    str += "()\n";
+                }
+                break;
+            case Unary_Param:
+                vec_size = funcrparamvec->size();
+                for(int i = vec_size - 1; i > 0; i--) {
+                    str += (*funcrparamvec)[i]->DumpIR();
+                    param_ast_i.push_back(ast_i - 1);
+                }
+                str += (*funcrparamvec)[0]->DumpIR();
+                param_ast_i.push_back(ast_i - 1);
+                if(global_symbol_table[ident].value == FuncTypeType::FuncType_VOID) {
+                    str += "\tcall @";
+                    str += ident;
+                    str += "(";
+                    size_t param_vec_size = param_ast_i.size();
+                    str += "\%";
+                    str += std::to_string(param_ast_i[0]);
+                    for(int i = 1; i < param_vec_size; ++i) {
+                        str += ", ";
+                        str += "\%";
+                        str += std::to_string(param_ast_i[i]);
+                    }
+                    str += ")\n";
+                }
+                else {
+                    str += "\t\%";
+                    str += std::to_string(ast_i++);
+                    str += " = call @";
+                    str += ident;
+                    str += "(";
+                    size_t param_vec_size = param_ast_i.size();
+                    str += "\%";
+                    str += std::to_string(param_ast_i[0]);
+                    for(int i = 1; i < param_vec_size; ++i) {
+                        str += ", ";
+                        str += "\%";
+                        str += std::to_string(param_ast_i[i]);
+                    }
+                    str += ")\n";
                 }
                 break;
             default:
@@ -1265,8 +1486,11 @@ class ConstDefAST : public BaseAST {
     std::string DumpIR() const override {
         std::string str;
         int const_val = ConstCalc();
-        (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
-            symbol_t{const_val, symbol_tag::Symbol_Const};
+        if(field == symbol_field::Field_Local)
+            (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
+                symbol_t{const_val, symbol_tag::Symbol_Const};
+        else
+            global_symbol_table[ident] = symbol_t{const_val, symbol_tag::Symbol_Const};
         return str;
     }
 
@@ -1345,12 +1569,35 @@ class LValAST : public BaseAST {
     std::string DumpIR() const override {
         std::string str;
         symbol_table_list_elem_t *target_symbol_table = search_symbol_table(ident);
+        symbol_t symbol;
         if(target_symbol_table == nullptr) {
-            std::cerr << "Error: Can't find ident." << std::endl;
-            str = ident;
+            if(global_symbol_table.find(ident) != global_symbol_table.end()) {
+                symbol = global_symbol_table[ident];
+                if(symbol.tag == 
+                    symbol_tag::Symbol_Const) {
+                    str += "\t\%";
+                    str += std::to_string(ast_i);
+                    str += " = add 0, ";
+                    str += std::to_string(symbol.value);
+                    str += "\n";
+                    ast_i++;
+                }
+                else {
+                    str += "\t\%";
+                    str += std::to_string(ast_i);
+                    str += " = load @";
+                    str += ident;
+                    str += "\n";
+                    ast_i++;
+                }
+            }
+            else {
+                std::cerr << "Error: Can't find ident." << std::endl;
+                str = ident;
+            }
         }
         else {
-            symbol_t symbol = (*(target_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident];
+            symbol = (*(target_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident];
             int symbol_num = target_symbol_table->symbol_table_ptr->symbol_table_num;
             if(symbol.tag == 
                 symbol_tag::Symbol_Const) {
@@ -1449,23 +1696,40 @@ class VarDefAST : public BaseAST {
 
     std::string DumpIR() const override {
         std::string str;
-        str += "\t@";
-        str += ident;
-        str += "_";
-        str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
-        str += " = alloc i32\n";
-        if(type == VarDef_Init) {
-            str += initval->DumpIR();
-            str += "\tstore \%";
-            str += std::to_string(ast_i - 1);
-            str += ", @";
+        if(field == symbol_field::Field_Local) {
+            str += "\t@";
             str += ident;
             str += "_";
             str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
-            str += "\n";
+            str += " = alloc i32\n";
+            if(type == VarDef_Init) {
+                str += initval->DumpIR();
+                str += "\tstore \%";
+                str += std::to_string(ast_i - 1);
+                str += ", @";
+                str += ident;
+                str += "_";
+                str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
+                str += "\n";
+            }
+            (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
+                symbol_t{-1, symbol_tag::Symbol_Var};
         }
-        (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
-            symbol_t{-1, symbol_tag::Symbol_Var};
+        else {
+            str += "global @";
+            str += ident;
+            str += " = alloc i32, ";
+            if(type == VarDef_Init) {
+                int val = initval->ConstCalc();
+                str += std::to_string(val);
+                str += "\n";
+                global_symbol_table[ident] = symbol_t{val, symbol_tag::Symbol_Var};
+            }
+            else {
+                str += "zeroinit\n";
+                global_symbol_table[ident] = symbol_t{0, symbol_tag::Symbol_Var};
+            }
+        }
         return str;
     }
 

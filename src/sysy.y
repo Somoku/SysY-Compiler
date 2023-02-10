@@ -42,7 +42,7 @@ using namespace std;
 
 // lexer 返回的所有 token 种类的声明
 // 注意 IDENT 和 INT_CONST 会返回 token 的值, 分别对应 str_val 和 int_val
-%token INT RETURN CONST IF ELSE WHILE BREAK CONTINUE
+%token INT RETURN CONST IF ELSE WHILE BREAK CONTINUE VOID
 %token LT GT LE GE EQ NEQ
 %token AND OR
 %token <str_val> IDENT
@@ -52,10 +52,10 @@ using namespace std;
 %type <ast_val> FuncDef FuncType Block Stmt Exp PrimaryExp UnaryExp MulExp 
                 AddExp RelExp EqExp LAndExp LOrExp Decl ConstDecl BType
                 ConstDef ConstInitVal BlockItem LVal ConstExp VarDecl VarDef
-                InitVal NonIfStmt OpenStmt ClosedStmt
+                InitVal NonIfStmt OpenStmt ClosedStmt FuncFParam CompUnit
 %type <int_val> Number
 %type <char_val> UnaryOp
-%type <vec_ast_val> ConstDefVec BlockItemVec VarDefVec
+%type <vec_ast_val> ConstDefVec BlockItemVec VarDefVec FuncFParamVec FuncRParamVec
 
 %%
 
@@ -64,11 +64,40 @@ using namespace std;
 // 而 parser 一旦解析完 CompUnit, 就说明所有的 token 都被解析了, 即解析结束了
 // 此时我们应该把 FuncDef 返回的结果收集起来, 作为 AST 传给调用 parser 的函数
 // $1 指代规则里第一个符号的返回值, 也就是 FuncDef 的返回值
+CompUnitRoot
+  : CompUnit {
+    auto comp_unit_root = make_unique<CompUnitRootAST>();
+    comp_unit_root->compunit = unique_ptr<BaseAST>($1);
+    ast = move(comp_unit_root);
+  }
+  ;
+
 CompUnit
   : FuncDef {
-    auto comp_unit = make_unique<CompUnitAST>();
-    comp_unit->func_def = unique_ptr<BaseAST>($1);
-    ast = move(comp_unit);
+    auto ast = new CompUnitAST();
+    ast->func_def = unique_ptr<BaseAST>($1);
+    ast->type = CompUnitType::CompUnit_SinFunc;
+    $$ = ast;
+  }
+  | Decl {
+    auto ast = new CompUnitAST();
+    ast->decl = unique_ptr<BaseAST>($1);
+    ast->type = CompUnitType::CompUnit_SinDecl;
+    $$ = ast;
+  }
+  | CompUnit FuncDef {
+    auto ast = new CompUnitAST();
+    ast->compunit = unique_ptr<BaseAST>($1);
+    ast->func_def = unique_ptr<BaseAST>($2);
+    ast->type = CompUnitType::CompUnit_MulFunc;
+    $$ = ast;
+  }
+  | CompUnit Decl {
+    auto ast = new CompUnitAST();
+    ast->compunit = unique_ptr<BaseAST>($1);
+    ast->decl = unique_ptr<BaseAST>($2);
+    ast->type = CompUnitType::CompUnit_MulDecl;
+    $$ = ast;
   }
   ;
 
@@ -88,6 +117,16 @@ FuncDef
     ast->func_type = unique_ptr<BaseAST>($1);
     ast->ident = *unique_ptr<string>($2);
     ast->block = unique_ptr<BaseAST>($5);
+    ast->type = FuncDefType::FuncDef_Noparam;
+    $$ = ast;
+  }
+  | FuncType IDENT '(' FuncFParamVec ')' Block {
+    auto ast = new FuncDefAST();
+    ast->func_type = unique_ptr<BaseAST>($1);
+    ast->ident = *unique_ptr<string>($2);
+    ast->funcfparamvec = unique_ptr<vector<unique_ptr<BaseAST> > >($4);
+    ast->block = unique_ptr<BaseAST>($6);
+    ast->type = FuncDefType::FuncDef_Param;
     $$ = ast;
   }
   ;
@@ -96,7 +135,36 @@ FuncDef
 FuncType
   : INT {
     auto ast = new FuncTypeAST();
-    ast->int_type = string("int");
+    ast->type = FuncTypeType::FuncType_INT;
+    $$ = ast;
+  }
+  | VOID {
+    auto ast = new FuncTypeAST();
+    ast->type = FuncTypeType::FuncType_VOID;
+    $$ = ast;
+  }
+  ;
+
+FuncFParamVec
+  : FuncFParam ',' FuncFParamVec {
+    auto funcfparam = unique_ptr<BaseAST>($1);
+    auto funcfparamvec = $3;
+    funcfparamvec->push_back(move(funcfparam));
+    $$ = funcfparamvec;
+  }
+  | FuncFParam {
+    auto funcfparam = unique_ptr<BaseAST>($1);
+    auto funcfparamvec = new vector<unique_ptr<BaseAST> >();
+    funcfparamvec->push_back(move(funcfparam));
+    $$ = funcfparamvec;
+  }
+  ;
+
+FuncFParam
+  : BType IDENT {
+    auto ast = new FuncFParamAST();
+    ast->btype = unique_ptr<BaseAST>($1);
+    ast->ident = *unique_ptr<string>($2);
     $$ = ast;
   }
   ;
@@ -263,6 +331,34 @@ UnaryExp
     ast->type = UnaryType::Unary_UnaryExp;
     $$ = ast;
   }
+  | IDENT '(' ')' {
+    auto ast = new UnaryExpAST();
+    ast->ident = *unique_ptr<string>($1);
+    ast->type = UnaryType::Unary_NoParam;
+    $$ = ast;
+  }
+  | IDENT '(' FuncRParamVec ')' {
+    auto ast = new UnaryExpAST();
+    ast->ident = *unique_ptr<string>($1);
+    ast->funcrparamvec = unique_ptr<vector<unique_ptr<BaseAST> > >($3);
+    ast->type = UnaryType::Unary_Param;
+    $$ = ast;
+  }
+  ;
+
+FuncRParamVec
+  : Exp {
+    auto exp = unique_ptr<BaseAST>($1);
+    auto funcrparamvec = new vector<unique_ptr<BaseAST> >();
+    funcrparamvec->push_back(move(exp));
+    $$ = funcrparamvec;
+  }
+  | Exp ',' FuncRParamVec {
+    auto exp = unique_ptr<BaseAST>($1);
+    auto funcrparamvec = $3;
+    funcrparamvec->push_back(move(exp));
+    $$ = funcrparamvec;
+  }
   ;
 
 UnaryOp
@@ -423,16 +519,16 @@ LOrExp
   ;
 
 Decl
-  : ConstDecl {
-    auto ast = new DeclAST();
-    ast->exp = unique_ptr<BaseAST>($1);
-    ast->type = DeclType::Decl_Const;
-    $$ = ast;
-  }
-  | VarDecl {
+  : VarDecl {
     auto ast = new DeclAST();
     ast->exp = unique_ptr<BaseAST>($1);
     ast->type = DeclType::Decl_Var;
+    $$ = ast;
+  }
+  | ConstDecl {
+    auto ast = new DeclAST();
+    ast->exp = unique_ptr<BaseAST>($1);
+    ast->type = DeclType::Decl_Const;
     $$ = ast;
   }
   ;
