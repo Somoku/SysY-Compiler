@@ -3,6 +3,7 @@
 #include <cassert>
 #include <iostream>
 #include <unordered_map>
+#include <algorithm>
 
 std::unordered_map<koopa_raw_value_t, int> stack_offset;
 
@@ -40,16 +41,17 @@ void delete_builder(koopa_raw_program_builder_t builder) {
 void Visit(const koopa_raw_program_t &program) {
   int st_id = 0;
   // 执行一些其他的必要操作
-  std::cout << "\t.text" << std::endl;
 
   // 访问所有全局变量
-  Visit(program.values, 0, st_id);
+  if(program.values.len != 0)
+    std::cout << "\t.data\n";
+  Visit(program.values, 0, st_id, false);
   // 访问所有函数
-  Visit(program.funcs, 0, st_id);
+  Visit(program.funcs, 0, st_id, false);
 }
 
 // 访问 raw slice
-void Visit(const koopa_raw_slice_t &slice, int st_offset, int &st_id) {
+void Visit(const koopa_raw_slice_t &slice, int st_offset, int &st_id, bool RA_call) {
   for (size_t i = 0; i < slice.len; ++i) {
     auto ptr = slice.buffer[i];
     // 根据 slice 的 kind 决定将 ptr 视作何种元素
@@ -60,11 +62,11 @@ void Visit(const koopa_raw_slice_t &slice, int st_offset, int &st_id) {
         break;
       case KOOPA_RSIK_BASIC_BLOCK:
         // 访问基本块
-        Visit(reinterpret_cast<koopa_raw_basic_block_t>(ptr), st_offset, st_id);
+        Visit(reinterpret_cast<koopa_raw_basic_block_t>(ptr), st_offset, st_id, RA_call);
         break;
       case KOOPA_RSIK_VALUE:
         // 访问指令
-        Visit(reinterpret_cast<koopa_raw_value_t>(ptr), st_offset, st_id);
+        Visit(reinterpret_cast<koopa_raw_value_t>(ptr), st_offset, st_id, RA_call);
         break;
       default:
         // 我们暂时不会遇到其他内容, 于是不对其做任何处理
@@ -75,42 +77,60 @@ void Visit(const koopa_raw_slice_t &slice, int st_offset, int &st_id) {
 
 // 访问函数
 void Visit(const koopa_raw_function_t &func, int &st_id) {
+  if(func->bbs.len == 0)
+    return;
   // 执行一些其他的必要操作
+  std::cout << "\t.text" << std::endl;
   std::cout << "\t.globl ";
   std::cout << (func->name + 1) << std::endl;
   std::cout << (func->name + 1) << ":\n";
 
   // 获取存在返回值的指令数
-  int st_num = get_st_num(func->bbs);
-  int st_offset = st_num * 4;
-  if (st_offset <= 2048)
-    std::cout << "\taddi sp, sp, -" << st_offset << std::endl;
-  else{
-    std::cout << "\tli t0, -" << st_offset << std::endl;
-    std::cout << "\tadd sp, sp, t0\n";
-  }
+  int S_num = get_S_num(func->bbs);
+  bool RA_call = false;
+  int RA_num = get_RA_num(func->bbs, RA_call);
+  st_id = RA_num * 4;
+  int st_offset = (((S_num + RA_num + RA_call) * 4 + 15) / 16) * 16;
+  if(st_offset != 0){
+    if (st_offset <= 2048)
+      std::cout << "\taddi sp, sp, -" << st_offset << std::endl;
+    else{
+      std::cout << "\tli t0, -" << st_offset << std::endl;
+      std::cout << "\tadd sp, sp, t0\n";
+    }
+    if(RA_call) {
+      if(st_offset - 4 <= 2047) {
+        std::cout << "\taddi t6, sp, " << st_offset - 4 << std::endl;
+      }
+      else {
+        std::cout << "\tli t6, " << st_offset - 4 << std::endl;
+        std::cout << "\tadd t6, t6, sp\n";
+      }
+      std::cout << "\tsw ra, (t6)\n";
+    }
+  } 
   // 访问所有基本块
-  Visit(func->bbs, st_offset, st_id);
+  Visit(func->bbs, st_offset, st_id, RA_call);
 }
 
 // 访问基本块
-void Visit(const koopa_raw_basic_block_t &bb, int st_offset, int &st_id) {
+void Visit(const koopa_raw_basic_block_t &bb, int st_offset, int &st_id, bool RA_call) {
   // 执行一些其他的必要操作
   // ...
   // 访问所有指令
   std::cout << (bb->name + 1) << ":\n";
-  Visit(bb->insts, st_offset, st_id);
+  Visit(bb->insts, st_offset, st_id, RA_call);
 }
 
 // 访问指令
-void Visit(const koopa_raw_value_t &value, int st_offset, int &st_id) {
+void Visit(const koopa_raw_value_t &value, int st_offset, int &st_id, bool RA_call) {
   // 根据指令类型判断后续需要如何访问
   const auto &kind = value->kind;
   // std::cout << "# kind.tag = " << kind.tag << std::endl;
   switch (kind.tag) {
     case KOOPA_RVT_RETURN:
       // 访问 return 指令
-      Visit(kind.data.ret, st_offset);
+      Visit(kind.data.ret, st_offset, RA_call);
       break;
     case KOOPA_RVT_INTEGER:
       // 访问 integer 指令
@@ -122,22 +142,34 @@ void Visit(const koopa_raw_value_t &value, int st_offset, int &st_id) {
       st_id += 4;
       break;
     case KOOPA_RVT_STORE:
-      Visit(kind.data.store, st_id);
+      Visit(kind.data.store, st_id, st_offset);
       break;
     case KOOPA_RVT_LOAD:
-      stack_offset[value] = Visit(kind.data.load);
+      stack_offset[value] = Visit(kind.data.load, st_id);
       break;
     case KOOPA_RVT_ALLOC:
       // 暂时不处理 alloc, 为避免报错
       break;
     case KOOPA_RVT_GLOBAL_ALLOC:
-      // 暂时不处理 alloc, 为避免报错
+      std::cout << "\t.globl " << value->name + 1 << std::endl;
+      std::cout << value->name + 1 << ":\n";
+      Visit(kind.data.global_alloc);
       break;
     case KOOPA_RVT_BRANCH:
       Visit(kind.data.branch);
       break;
     case KOOPA_RVT_JUMP:
       Visit(kind.data.jump);
+      break;
+    case KOOPA_RVT_CALL:
+      Visit(kind.data.call, st_offset);
+      if(value->ty->tag != KOOPA_RTT_UNIT) {
+        stack_offset[value] = st_id;
+        std::cout << "\tli t6, " << st_id << std::endl;
+        std::cout << "\tadd t6, t6, sp\n";
+        std::cout << "\tsw a0, (t6)\n";
+        st_id += 4;
+      }
       break;
     default:
       // 其他类型暂时遇不到
@@ -150,7 +182,7 @@ void Visit(const koopa_raw_value_t &value, int st_offset, int &st_id) {
 // ...
 
 // 访问 return 指令
-void Visit(const koopa_raw_return_t &ret, int st_offset) {
+void Visit(const koopa_raw_return_t &ret, int st_offset, bool RA_call) {
   if(!ret.value) 
     std::cout << "\tli a0, 0\n";
   else {
@@ -163,14 +195,25 @@ void Visit(const koopa_raw_return_t &ret, int st_offset) {
       std::cout << "\tlw a0, (t1)\n";
     }
   }
-  // Visit(ret.value, st_num);
-  if (st_offset <= 2047)
-    std::cout << "\taddi sp, sp, " << st_offset << std::endl;
-  else {
-    std::cout << "\tli t0, " << st_offset << std::endl;
-    std::cout << "\tadd sp, sp, t0\n";
+  if(st_offset != 0){
+    if(RA_call) {
+      if(st_offset - 4 <= 2047) {
+        std::cout << "\taddi t6, sp, " << st_offset - 4 << std::endl;
+      }
+      else {
+        std::cout << "\tli t6, " << st_offset - 4 << std::endl;
+        std::cout << "\tadd t6, t6, sp\n";
+      }
+      std::cout << "\tlw ra, (t6)\n";
+    }
+    if (st_offset <= 2047)
+      std::cout << "\taddi sp, sp, " << st_offset << std::endl;
+    else {
+      std::cout << "\tli t0, " << st_offset << std::endl;
+      std::cout << "\tadd sp, sp, t0\n";
+    }
   }
-  std::cout << "\tret" << std::endl;
+  std::cout << "\tret\n\n";
 }
 
 // 访问 integer
@@ -301,27 +344,62 @@ void Visit(const koopa_raw_binary_t &binary, int &st_id) {
 }
 
 // 访问 store 指令
-void Visit(const koopa_raw_store_t &store, int &st_id) {
+void Visit(const koopa_raw_store_t &store, int &st_id, int st_offset) {
   if(store.value->kind.tag == KOOPA_RVT_INTEGER)
     std::cout << "\tli t0, " << store.value->kind.data.integer.value << std::endl;
+  else if(store.value->kind.tag == KOOPA_RVT_FUNC_ARG_REF) {
+    if(store.value->kind.data.func_arg_ref.index < 8)
+      std::cout << "\tmv t0, a" << store.value->kind.data.func_arg_ref.index << std::endl;
+    else {
+      std::cout << "\tli t6, " << (store.value->kind.data.func_arg_ref.index - 8) * 4 + st_offset << std::endl;
+      std::cout << "\tadd t6, t6, sp\n";
+      std::cout << "\tlw t0, (t6)\n";
+    }
+  }
   else {
     std::cout << "\tli t6, " << stack_offset[store.value] << std::endl;
     std::cout << "\tadd t6, sp, t6\n";
     std::cout << "\tlw t0, (t6)\n";
   }
-
-  if(stack_offset.find(store.dest) == stack_offset.end()) {
-    stack_offset[store.dest] = st_id;
-    st_id += 4;
+  if(store.dest->kind.tag == KOOPA_RVT_GLOBAL_ALLOC) {
+    std::cout << "\tla t6, " << store.dest->name + 1 << std::endl;
+    std::cout << "\tsw t0, (t6)\n";
   }
-  std::cout << "\tli t6, " << stack_offset[store.dest] << std::endl;
-  std::cout << "\tadd t6, sp, t6\n";
-  std::cout << "\tsw t0, (t6)\n";
+  else {
+    if(stack_offset.find(store.dest) == stack_offset.end()) {
+      stack_offset[store.dest] = st_id;
+      st_id += 4;
+    }
+    std::cout << "\tli t6, " << stack_offset[store.dest] << std::endl;
+    std::cout << "\tadd t6, sp, t6\n";
+    std::cout << "\tsw t0, (t6)\n";
+  }
 }
 
 // 访问 load 指令
-int Visit(const koopa_raw_load_t &load) {
+int Visit(const koopa_raw_load_t &load, int &st_id) {
+  if(load.src->kind.tag == KOOPA_RVT_GLOBAL_ALLOC) {
+    std::cout << "\tla t0, " << load.src->name + 1 << std::endl;
+    std::cout << "\tlw t1, 0(t0)\n";
+    std::cout << "\tli t6, " << st_id << std::endl;
+    std::cout << "\tadd t6, t6, sp\n";
+    std::cout << "\tsw t1, (t6)\n";
+    st_id += 4;
+    return st_id - 4;
+  }
   return stack_offset[load.src];
+}
+
+// 访问 global alloc 指令
+void Visit(const koopa_raw_global_alloc_t &global_alloc) {
+  if(global_alloc.init->kind.tag == KOOPA_RVT_ZERO_INIT)
+    std::cout << "\t.zero 4\n";
+  else if(global_alloc.init->kind.tag == KOOPA_RVT_INTEGER)
+    std::cout << "\t.word " << global_alloc.init->kind.data.integer.value << std::endl;
+  else {
+    std::cerr << "Error: Unknown global allocation type.\n";
+    assert(false);
+  }
 }
 
 // 访问 branch 指令
@@ -342,33 +420,103 @@ void Visit(const koopa_raw_jump_t &jump) {
   std::cout << "\tj " << (jump.target->name + 1) << std::endl;
 }
 
+// 访问 call 指令
+void Visit(const koopa_raw_call_t &call, int st_offset) {
+  int param_id = 0;
+  int param_len = call.args.len;
+  for(int i = 0; i < param_len; ++i) {
+    koopa_raw_value_t ptr = reinterpret_cast<koopa_raw_value_t>(call.args.buffer[i]);
+    if(ptr->kind.tag == KOOPA_RVT_INTEGER) {
+      if(i < 8) {
+        std::cout << "\tli a" << i << ", " << ptr->kind.data.integer.value << std::endl;
+      }
+      else {
+        std::cout << "\tli t0, " << ptr->kind.data.integer.value << std::endl;
+        std::cout << "\tli t6, " << param_id << std::endl;
+        std::cout << "\tadd t6, t6, sp\n";
+        std::cout << "\tsw t0, (t6)\n";
+        param_id += 4;
+      }
+    }
+    else {
+      if(stack_offset.find(ptr) == stack_offset.end()) {
+        std::cerr << "Error: Invalid parameter.\n";
+      }
+      else {
+        if(i < 8) {
+          std::cout << "\tli t6, " << stack_offset[ptr] << std::endl;
+          std::cout << "\tadd t6, t6, sp\n";
+          std::cout << "\tlw a" << i << ", (t6)\n";
+        }
+        else {
+          std::cout << "\tli t6, " << stack_offset[ptr] << std::endl;
+          std::cout << "\tadd t6, t6, sp\n";
+          std::cout << "\tlw t0, (t6)\n";
+          std::cout << "\tli t5, " << param_id << std::endl;
+          std::cout << "\tadd t5, t5, sp\n";
+          std::cout << "\tsw t0, (t5)\n";
+          param_id += 4;
+        }  
+      }
+    }
+  }
+  std::cout << "\tcall " << call.callee->name + 1 << std::endl;
+}
+
 // 访问 raw slice, 获取存在返回值的指令个数
-int get_st_num(const koopa_raw_slice_t &slice) {
-  int st_num = 0;
+int get_S_num(const koopa_raw_slice_t &slice) {
+  int S_num = 0;
   for (size_t i = 0; i < slice.len; ++i) {
     auto ptr = slice.buffer[i];
     // 根据 slice 的 kind 决定将 ptr 视作何种元素
     switch (slice.kind) {
       case KOOPA_RSIK_BASIC_BLOCK:
         // 访问基本块
-        st_num += get_st_num(reinterpret_cast<koopa_raw_basic_block_t>(ptr)->insts);
+        S_num += get_S_num(reinterpret_cast<koopa_raw_basic_block_t>(ptr)->insts);
         break;
       case KOOPA_RSIK_VALUE:
         // 访问指令
-        st_num += get_st_num(reinterpret_cast<koopa_raw_value_t>(ptr));
+        S_num += get_S_num(reinterpret_cast<koopa_raw_value_t>(ptr));
         break;
       default:
         // 我们暂时不会遇到其他内容, 于是不对其做任何处理
         assert(false);
     }
   }
-  return st_num;
+  return S_num;
 }
 
 // 访问指令，若该指令存在返回值，则返回 1, 否则返回 0
-int get_st_num(const koopa_raw_value_t &value) {
+int get_S_num(const koopa_raw_value_t &value) {
   const auto &ty = value->ty;
   if(ty->tag == KOOPA_RTT_UNIT)
     return 0;
   return 1;
+}
+
+// 访问 raw slice, 获取需要分配栈空间的参数数量以及是否要为 ra 分配空间
+int get_RA_num(const koopa_raw_slice_t &slice, bool &RA_call) {
+  int RA_num = 0;
+  for (size_t i = 0; i < slice.len; ++i) {
+    auto ptr = slice.buffer[i];
+    switch(slice.kind) {
+      case KOOPA_RSIK_BASIC_BLOCK:
+        RA_num = std::max(RA_num, get_RA_num(reinterpret_cast<koopa_raw_basic_block_t>(ptr)->insts, RA_call));
+        break;
+      case KOOPA_RSIK_VALUE:
+        RA_num = std::max(RA_num, get_RA_num(reinterpret_cast<koopa_raw_value_t>(ptr), RA_call));
+        break;
+      default:
+        assert(false);
+    }
+  }
+  return RA_num;
+}
+
+// 访问指令，若指令为 call 指令，则返回参数个数 - 8，并设 RA_call 为 true
+int get_RA_num(const koopa_raw_value_t &value, bool &RA_call) {
+  if(value->kind.tag != KOOPA_RVT_CALL)
+    return 0;
+  RA_call = true;
+  return (int32_t)value->kind.data.call.args.len - 8;
 }
