@@ -27,6 +27,8 @@ class BaseAST {
     virtual std::string DumpIR() const = 0;
     virtual int ConstCalc() const = 0;
     virtual std::string getIdent() const = 0;
+    virtual std::string getPointer() const = 0;
+    virtual std::unique_ptr<std::vector<int> > getArrInit() const = 0;
 };
 
 // CompUnitRoot
@@ -47,6 +49,15 @@ class CompUnitRootAST : public BaseAST {
 
     std::string getIdent() const override {
         return std::string();
+    }
+
+    std::string getPointer() const override {
+        return std::string();
+    }
+
+    std::unique_ptr<std::vector<int> > getArrInit() const override {
+        std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        return arr_ptr; 
     }
 };
 
@@ -104,6 +115,15 @@ class CompUnitAST : public BaseAST {
     std::string getIdent() const override {
         return std::string();
     }
+
+    std::string getPointer() const override {
+        return std::string();
+    }
+
+    std::unique_ptr<std::vector<int> > getArrInit() const override {
+        std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        return arr_ptr; 
+    }
 };
 
 // FuncDef Auxiliary data
@@ -123,6 +143,8 @@ class FuncDefAST : public BaseAST {
 
     std::string DumpIR() const override {
         std::string str;
+        // std::string func_ident;
+        // symbol_table_list_elem_t *target_symbol_table;
         global_symbol_table[ident] = symbol_t{func_type->ConstCalc(), symbol_tag::Symbol_Func};
         field = symbol_field::Field_Local;
         if(type == FuncDef_Noparam) {
@@ -179,6 +201,15 @@ class FuncDefAST : public BaseAST {
     std::string getIdent() const override {
         return std::string();
     }
+
+    std::string getPointer() const override {
+        return std::string();
+    }
+
+    std::unique_ptr<std::vector<int> > getArrInit() const override {
+        std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        return arr_ptr; 
+    }
 };
 
 // FuncType Auxiliary data
@@ -207,6 +238,15 @@ class FuncTypeAST : public BaseAST {
 
     std::string getIdent() const override {
         return std::string();
+    }
+
+    std::string getPointer() const override {
+        return std::string();
+    }
+
+    std::unique_ptr<std::vector<int> > getArrInit() const override {
+        std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        return arr_ptr; 
     }
 };
 
@@ -251,6 +291,15 @@ class FuncFParamAST : public BaseAST {
         str += ": i32";
         return str;
     }
+
+    std::string getPointer() const override {
+        return std::string();
+    }
+
+    std::unique_ptr<std::vector<int> > getArrInit() const override {
+        std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        return arr_ptr; 
+    }
 };
 
 // Block Auxiliary data
@@ -284,6 +333,15 @@ class BlockAST : public BaseAST {
     std::string getIdent() const override {
         return std::string();
     }
+
+    std::string getPointer() const override {
+        return std::string();
+    }
+
+    std::unique_ptr<std::vector<int> > getArrInit() const override {
+        std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        return arr_ptr; 
+    }
 };
 
 // Stmt Auxiliary data
@@ -310,6 +368,15 @@ class StmtAST : public BaseAST {
 
     std::string getIdent() const override {
         return std::string();
+    }
+
+    std::string getPointer() const override {
+        return std::string();
+    }
+
+    std::unique_ptr<std::vector<int> > getArrInit() const override {
+        std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        return arr_ptr; 
     }
 };
 
@@ -459,6 +526,15 @@ class OpenStmtAST : public BaseAST {
     std::string getIdent() const override {
         return std::string();
     }
+
+    std::string getPointer() const override {
+        return std::string();
+    }
+
+    std::unique_ptr<std::vector<int> > getArrInit() const override {
+        std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        return arr_ptr; 
+    }
 };
 
 // ClosedStmt Auxiliary data
@@ -583,6 +659,15 @@ class ClosedStmtAST : public BaseAST {
     std::string getIdent() const override {
         return std::string();
     }
+
+    std::string getPointer() const override {
+        return std::string();
+    }
+
+    std::unique_ptr<std::vector<int> > getArrInit() const override {
+        std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        return arr_ptr; 
+    }
 };
 
 // NonIfStmt Auxiliary data
@@ -609,6 +694,10 @@ class NonIfStmtAST : public BaseAST {
     std::string DumpIR() const override {
         std::string str;
         int while_block_id = 0;
+        std::string ident;
+        symbol_table_list_elem_t *target_symbol_table;
+        symbol_tag tag;
+        int store_src;
         switch(type) {
             case NonIf_Ret:
                 str += exp->DumpIR();
@@ -620,11 +709,40 @@ class NonIfStmtAST : public BaseAST {
                 break;
             case NonIf_Lval:
                 str += exp->DumpIR();
-                str += "\tstore \%";
-                str += std::to_string(ast_i - 1);
-                str += ", @";
-                str += lval->getIdent();
-                str += "\n";
+                store_src = ast_i - 1;
+                ident = lval->getIdent();
+                target_symbol_table = search_symbol_table(ident);   
+                if(target_symbol_table != nullptr) {
+                    tag = (*(target_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident].tag;
+                    ident += "_";
+                    ident += std::to_string(target_symbol_table->symbol_table_ptr->symbol_table_num);
+                }
+                else if(global_symbol_table.find(ident) != global_symbol_table.end())
+                    tag = global_symbol_table[ident].tag;
+                else {
+                    std::cerr << "Error: Invalid ident.\n";
+                    assert(false);
+                }
+                switch(tag) {
+                    case Symbol_Const:
+                    case Symbol_Var:
+                        str += "\tstore \%";
+                        str += std::to_string(ast_i - 1);
+                        str += ", @";
+                        str += ident;
+                        str += "\n";
+                        break;
+                    case Symbol_Arr:
+                        str += lval->getPointer();
+                        str += "\tstore \%";
+                        str += std::to_string(store_src);
+                        str += ", \%";
+                        str += std::to_string(ast_i - 1);
+                        str += "\n";
+                        break;
+                    default:
+                        assert(false);
+                }
                 break;
             case NonIf_Exp:
                 str += exp->DumpIR();
@@ -673,6 +791,15 @@ class NonIfStmtAST : public BaseAST {
     std::string getIdent() const override {
         return std::string();
     }
+
+    std::string getPointer() const override {
+        return std::string();
+    }
+
+    std::unique_ptr<std::vector<int> > getArrInit() const override {
+        std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        return arr_ptr; 
+    }
 };
 
 // Exp
@@ -692,6 +819,15 @@ class ExpAST : public BaseAST {
 
     std::string getIdent() const override {
         return std::string();
+    }
+
+    std::string getPointer() const override {
+        return std::string();
+    }
+
+    std::unique_ptr<std::vector<int> > getArrInit() const override {
+        std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        return arr_ptr; 
     }
 };
 
@@ -751,6 +887,15 @@ class PrimaryExpAST : public BaseAST {
 
     std::string getIdent() const override {
         return std::string();
+    }
+
+    std::string getPointer() const override {
+        return std::string();
+    }
+
+    std::unique_ptr<std::vector<int> > getArrInit() const override {
+        std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        return arr_ptr; 
     }
 };
 
@@ -878,6 +1023,15 @@ class UnaryExpAST : public BaseAST {
     std::string getIdent() const override {
         return std::string();
     }
+
+    std::string getPointer() const override {
+        return std::string();
+    }
+
+    std::unique_ptr<std::vector<int> > getArrInit() const override {
+        std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        return arr_ptr; 
+    }
 };
 
 // MulExp Auxiliary data
@@ -969,6 +1123,15 @@ class MulExpAST : public BaseAST {
     std::string getIdent() const override {
         return std::string();
     }
+
+    std::string getPointer() const override {
+        return std::string();
+    }
+
+    std::unique_ptr<std::vector<int> > getArrInit() const override {
+        std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        return arr_ptr; 
+    }
 };
 
 // AddExp Auxiliary data
@@ -1042,6 +1205,15 @@ class AddExpAST : public BaseAST {
 
     std::string getIdent() const override {
         return std::string();
+    }
+
+    std::string getPointer() const override {
+        return std::string();
+    }
+
+    std::unique_ptr<std::vector<int> > getArrInit() const override {
+        std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        return arr_ptr; 
     }
 };
 
@@ -1151,6 +1323,15 @@ class RelExpAST : public BaseAST {
     std::string getIdent() const override {
         return std::string();
     }
+
+    std::string getPointer() const override {
+        return std::string();
+    }
+
+    std::unique_ptr<std::vector<int> > getArrInit() const override {
+        std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        return arr_ptr; 
+    }
 };
 
 // EqExp Auxiliary data
@@ -1224,6 +1405,15 @@ class EqExpAST : public BaseAST {
 
     std::string getIdent() const override {
         return std::string();
+    }
+    
+    std::string getPointer() const override {
+        return std::string();
+    }
+
+    std::unique_ptr<std::vector<int> > getArrInit() const override {
+        std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        return arr_ptr; 
     }
 };
 
@@ -1315,6 +1505,15 @@ class LAndExpAST : public BaseAST {
     std::string getIdent() const override {
         return std::string();
     }
+
+    std::string getPointer() const override {
+        return std::string();
+    }
+
+    std::unique_ptr<std::vector<int> > getArrInit() const override {
+        std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        return arr_ptr; 
+    }
 };
 
 // LOrExp Auxiliary data
@@ -1405,6 +1604,15 @@ class LOrExpAST : public BaseAST {
     std::string getIdent() const override {
         return std::string();
     }
+
+    std::string getPointer() const override {
+        return std::string();
+    }
+
+    std::unique_ptr<std::vector<int> > getArrInit() const override {
+        std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        return arr_ptr; 
+    }
 };
 
 // Decl Auxiliary data
@@ -1432,6 +1640,15 @@ class DeclAST : public BaseAST {
     std::string getIdent() const override {
         return std::string();
     }
+
+    std::string getPointer() const override {
+        return std::string();
+    }
+
+    std::unique_ptr<std::vector<int> > getArrInit() const override {
+        std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        return arr_ptr; 
+    }
 };
 
 // ConstDecl
@@ -1455,6 +1672,15 @@ class ConstDeclAST : public BaseAST {
     std::string getIdent() const override {
         return std::string();
     }
+
+    std::string getPointer() const override {
+        return std::string();
+    }
+
+    std::unique_ptr<std::vector<int> > getArrInit() const override {
+        std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        return arr_ptr; 
+    }
 };
 
 // BType
@@ -1474,22 +1700,125 @@ class BTypeAST : public BaseAST {
     std::string getIdent() const override {
         return std::string();
     }
+
+    std::string getPointer() const override {
+        return std::string();
+    }
+
+    std::unique_ptr<std::vector<int> > getArrInit() const override {
+        std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        return arr_ptr; 
+    }
+};
+
+// ConstDef Auxiliary data
+enum ConstDefType {
+    ConstDef_Int,
+    ConstDef_Arr
 };
 
 // ConstDef
 class ConstDefAST : public BaseAST {
   public:
+    ConstDefType type;
     std::string ident;
     std::unique_ptr<BaseAST> constinitval;
+    std::unique_ptr<BaseAST> constexp;
 
     std::string DumpIR() const override {
         std::string str;
-        int const_val = ConstCalc();
-        if(field == symbol_field::Field_Local)
-            (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
-                symbol_t{const_val, symbol_tag::Symbol_Const};
-        else
-            global_symbol_table[ident] = symbol_t{const_val, symbol_tag::Symbol_Const};
+        std::unique_ptr<std::vector<int> > arr_init;
+        int const_val, arr_len, init_len, rest_len;
+        switch(type) {
+            case ConstDef_Int:
+                const_val = ConstCalc();
+                if(field == symbol_field::Field_Local)
+                    (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
+                        symbol_t{const_val, symbol_tag::Symbol_Const};
+                else
+                    global_symbol_table[ident] = symbol_t{const_val, symbol_tag::Symbol_Const};
+                break;
+            case ConstDef_Arr:
+                arr_len = constexp->ConstCalc();
+                arr_init = constinitval->getArrInit();
+                init_len = arr_init->size();
+                rest_len = arr_len - init_len;
+                if(field == symbol_field::Field_Local) {
+                    (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
+                        symbol_t{arr_len, symbol_tag::Symbol_Const};
+                    str += "\t@";
+                    str += ident;
+                    str += "_";
+                    str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
+                    str += " = alloc [i32, ";
+                    str += std::to_string(arr_len);
+                    str += "]\n";
+                    for(int i = 0; i < init_len; ++i) {
+                        str += "\t\%";
+                        str += std::to_string(ast_i);
+                        str += " = getelemptr @";
+                        str += ident;
+                        str += "_";
+                        str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
+                        str += ", ";
+                        str += std::to_string(i);
+                        str += "\n";
+                        str += "\tstore ";
+                        str += std::to_string((*arr_init)[i]);
+                        str += ", \%";
+                        str += std::to_string(ast_i);
+                        str += "\n";
+                        ast_i++;
+                    }
+                    for(int i = 0; i < rest_len; ++i) {
+                        str += "\t\%";
+                        str += std::to_string(ast_i);
+                        str += " = getelemptr @";
+                        str += ident;
+                        str += "_";
+                        str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
+                        str += ", ";
+                        str += std::to_string(i + init_len);
+                        str += "\n";
+                        str += "\tstore ";
+                        str += std::to_string(0);
+                        str += ", \%";
+                        str += std::to_string(ast_i);
+                        str += "\n";
+                        ast_i++;
+                    }
+                }
+                else {
+                    global_symbol_table[ident] = symbol_t{arr_len, symbol_tag::Symbol_Arr};
+                    str += "global @";
+                    str += ident;
+                    str += " = alloc [i32, ";
+                    str += std::to_string(arr_len);
+                    str += "], {";
+                    if(init_len != 0) {
+                        str += std::to_string((*arr_init)[0]);
+                        for(int i = 1; i < init_len; ++i) {
+                            str += ", ";
+                            str += std::to_string((*arr_init)[i]);
+                        }
+                        for(int i = 0; i < rest_len; ++i) {
+                            str += ", ";
+                            str += std::to_string((*arr_init)[i]);
+                        }
+                    }
+                    else {
+                        str += std::to_string(0);
+                        for(int i = 1; i < rest_len; ++i) {
+                            str += ", ";
+                            str += std::to_string(0);
+                        }
+                    }
+                    str += "}\n";
+                }
+                break;
+            default:
+                assert(false);
+        }
         return str;
     }
 
@@ -1500,12 +1829,30 @@ class ConstDefAST : public BaseAST {
     std::string getIdent() const override {
         return std::string();
     }
+
+    std::string getPointer() const override {
+        return std::string();
+    }
+
+    std::unique_ptr<std::vector<int> > getArrInit() const override {
+        std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        return arr_ptr; 
+    }
+};
+
+// ConstInitVal Auxiliary data
+enum ConstInitValType {
+    ConstInitVal_Exp,
+    ConstInitVal_Null,
+    ConstInitVal_Vec
 };
 
 // ConstInitVal
 class ConstInitValAST : public BaseAST {
   public:
+    ConstInitValType type;
     std::unique_ptr<BaseAST> constexp;
+    std::unique_ptr<std::vector<std::unique_ptr<BaseAST> > > constexpvec;
 
     std::string DumpIR() const override {
         std::string str;
@@ -1518,6 +1865,24 @@ class ConstInitValAST : public BaseAST {
 
     std::string getIdent() const override {
         return std::string();
+    }
+
+    std::string getPointer() const override {
+        return std::string();
+    }
+
+    std::unique_ptr<std::vector<int> > getArrInit() const override {
+        std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        if(type == ConstInitVal_Vec) {
+            int vec_size = constexpvec->size();
+            for(int i = vec_size - 1; i >= 0; i--)
+                arr_ptr->push_back((*constexpvec)[i]->ConstCalc());
+        }
+        else if(type == ConstInitVal_Exp) {
+            std::cerr << "Error: Invalid ConstInitVal.\n";
+            assert(false);
+        }
+        return arr_ptr; 
     }
 };
 
@@ -1558,20 +1923,64 @@ class BlockItemAST : public BaseAST {
     std::string getIdent() const override {
         return std::string();
     }
+
+    std::string getPointer() const override {
+        return std::string();
+    }
+
+    std::unique_ptr<std::vector<int> > getArrInit() const override {
+        std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        return arr_ptr; 
+    }
+};
+
+// LVal Auxiliary data
+enum LValType {
+    LVal_Int,
+    LVal_Arr
 };
 
 // LVal
 class LValAST : public BaseAST {
   public:
+    LValType type;
     std::string ident;
+    std::unique_ptr<BaseAST> exp;
 
     std::string DumpIR() const override {
         std::string str;
         symbol_table_list_elem_t *target_symbol_table = search_symbol_table(ident);
         symbol_t symbol;
-        if(target_symbol_table == nullptr) {
-            if(global_symbol_table.find(ident) != global_symbol_table.end()) {
-                symbol = global_symbol_table[ident];
+        if(type == LVal_Int) {
+            if(target_symbol_table == nullptr) {
+                if(global_symbol_table.find(ident) != global_symbol_table.end()) {
+                    symbol = global_symbol_table[ident];
+                    if(symbol.tag == 
+                        symbol_tag::Symbol_Const) {
+                        str += "\t\%";
+                        str += std::to_string(ast_i);
+                        str += " = add 0, ";
+                        str += std::to_string(symbol.value);
+                        str += "\n";
+                        ast_i++;
+                    }
+                    else if(symbol.tag == symbol_tag::Symbol_Var) {
+                        str += "\t\%";
+                        str += std::to_string(ast_i);
+                        str += " = load @";
+                        str += ident;
+                        str += "\n";
+                        ast_i++;
+                    }
+                }
+                else {
+                    std::cerr << "Error: Can't find ident." << std::endl;
+                    str = ident;
+                }
+            }
+            else {
+                symbol = (*(target_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident];
+                int symbol_num = target_symbol_table->symbol_table_ptr->symbol_table_num;
                 if(symbol.tag == 
                     symbol_tag::Symbol_Const) {
                     str += "\t\%";
@@ -1581,39 +1990,59 @@ class LValAST : public BaseAST {
                     str += "\n";
                     ast_i++;
                 }
-                else {
+                else if(symbol.tag == symbol_tag::Symbol_Var) {
                     str += "\t\%";
                     str += std::to_string(ast_i);
                     str += " = load @";
                     str += ident;
+                    str += "_";
+                    str += std::to_string(symbol_num);
                     str += "\n";
                     ast_i++;
                 }
             }
-            else {
-                std::cerr << "Error: Can't find ident." << std::endl;
-                str = ident;
-            }
         }
         else {
-            symbol = (*(target_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident];
-            int symbol_num = target_symbol_table->symbol_table_ptr->symbol_table_num;
-            if(symbol.tag == 
-                symbol_tag::Symbol_Const) {
-                str += "\t\%";
-                str += std::to_string(ast_i);
-                str += " = add 0, ";
-                str += std::to_string(symbol.value);
-                str += "\n";
-                ast_i++;
+            if(target_symbol_table == nullptr) {
+                if(global_symbol_table.find(ident) != global_symbol_table.end()) {
+                    str += exp->DumpIR();
+                    str += "\t\%";
+                    str += std::to_string(ast_i);
+                    str += " = getelemptr @";
+                    str += ident;
+                    str += ", \%";
+                    str += std::to_string(ast_i - 1);
+                    str += "\n";
+                    ast_i++;
+                    str += "\t\%";
+                    str += std::to_string(ast_i);
+                    str += " = load \%";
+                    str += std::to_string(ast_i - 1);
+                    str += "\n";
+                    ast_i++;
+                }
+                else {
+                    std::cerr << "Error: Can't find ident." << std::endl;
+                    assert(false);
+                }
             }
             else {
+                int symbol_num = target_symbol_table->symbol_table_ptr->symbol_table_num;
+                str += exp->DumpIR();
                 str += "\t\%";
                 str += std::to_string(ast_i);
-                str += " = load @";
+                str += " = getelemptr @";
                 str += ident;
                 str += "_";
                 str += std::to_string(symbol_num);
+                str += ", \%";
+                str += std::to_string(ast_i - 1);
+                str += "\n";
+                ast_i++;
+                str += "\t\%";
+                str += std::to_string(ast_i);
+                str += " = load \%";
+                str += std::to_string(ast_i - 1);
                 str += "\n";
                 ast_i++;
             }
@@ -1630,18 +2059,50 @@ class LValAST : public BaseAST {
 
     std::string getIdent() const override {
         std::string str;
+        str += ident;
+        return str;
+    }
+
+    std::string getPointer() const override {
+        std::string str;
         symbol_table_list_elem_t *target_symbol_table = search_symbol_table(ident);
-        if(target_symbol_table != nullptr) {
+        if(target_symbol_table == nullptr) {
+            if(global_symbol_table.find(ident) != global_symbol_table.end()) {
+                str += exp->DumpIR();
+                str += "\t\%";
+                str += std::to_string(ast_i);
+                str += " = getelemptr @";
+                str += ident;
+                str += ", \%";
+                str += std::to_string(ast_i - 1);
+                str += "\n";
+                ast_i++;
+            }
+            else {
+                std::cerr << "Error: Can't find ident." << std::endl;
+                assert(false);
+            }
+        }
+        else {
             int symbol_num = target_symbol_table->symbol_table_ptr->symbol_table_num;
+            str += exp->DumpIR();
+            str += "\t\%";
+            str += std::to_string(ast_i);
+            str += " = getelemptr @";
             str += ident;
             str += "_";
             str += std::to_string(symbol_num);
+            str += ", \%";
+            str += std::to_string(ast_i - 1);
+            str += "\n";
+            ast_i++;
         }
-        else if(global_symbol_table.find(ident) != global_symbol_table.end())
-            str += ident;
-        else
-            std::cerr << "Error: Invalid ident.\n";
         return str;
+    }
+
+    std::unique_ptr<std::vector<int> > getArrInit() const override {
+        std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        return arr_ptr; 
     }
 };
 
@@ -1661,6 +2122,15 @@ class ConstExpAST : public BaseAST {
 
     std::string getIdent() const override {
         return std::string();
+    }
+
+    std::string getPointer() const override {
+        return std::string();
+    }
+
+    std::unique_ptr<std::vector<int> > getArrInit() const override {
+        std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        return arr_ptr; 
     }
 };
 
@@ -1685,12 +2155,23 @@ class VarDeclAST : public BaseAST {
     std::string getIdent() const override {
         return std::string();
     }
+
+    std::string getPointer() const override {
+        return std::string();
+    }
+
+    std::unique_ptr<std::vector<int> > getArrInit() const override {
+        std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        return arr_ptr; 
+    }
 };
 
 // VarDef Auxiliary data
 enum VarDefType {
-    VarDef_NO_Init,
-    VarDef_Init
+    VarDef_Int_NO_Init,
+    VarDef_Int_Init,
+    VarDef_Arr_NO_Init,
+    VarDef_Arr_Init
 };
 
 // VarDef
@@ -1699,41 +2180,145 @@ class VarDefAST : public BaseAST {
     VarDefType type;
     std::string ident;
     std::unique_ptr<BaseAST> initval;
+    std::unique_ptr<BaseAST> constexp;
 
     std::string DumpIR() const override {
         std::string str;
-        if(field == symbol_field::Field_Local) {
-            str += "\t@";
-            str += ident;
-            str += "_";
-            str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
-            str += " = alloc i32\n";
-            if(type == VarDef_Init) {
-                str += initval->DumpIR();
-                str += "\tstore \%";
-                str += std::to_string(ast_i - 1);
-                str += ", @";
+        std::unique_ptr<std::vector<int> > arr_init;
+        if(type == VarDef_Int_Init || type == VarDef_Int_NO_Init) {
+            if(field == symbol_field::Field_Local) {
+                str += "\t@";
                 str += ident;
                 str += "_";
                 str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
-                str += "\n";
-            }
-            (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
-                symbol_t{-1, symbol_tag::Symbol_Var};
-        }
-        else {
-            str += "global @";
-            str += ident;
-            str += " = alloc i32, ";
-            if(type == VarDef_Init) {
-                int val = initval->ConstCalc();
-                str += std::to_string(val);
-                str += "\n";
-                global_symbol_table[ident] = symbol_t{val, symbol_tag::Symbol_Var};
+                str += " = alloc i32\n";
+                if(type == VarDef_Int_Init) {
+                    str += initval->DumpIR();
+                    str += "\tstore \%";
+                    str += std::to_string(ast_i - 1);
+                    str += ", @";
+                    str += ident;
+                    str += "_";
+                    str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
+                    str += "\n";
+                }
+                (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
+                    symbol_t{-1, symbol_tag::Symbol_Var};
             }
             else {
-                str += "zeroinit\n";
-                global_symbol_table[ident] = symbol_t{0, symbol_tag::Symbol_Var};
+                str += "global @";
+                str += ident;
+                str += " = alloc i32, ";
+                if(type == VarDef_Int_Init) {
+                    int val = initval->ConstCalc();
+                    str += std::to_string(val);
+                    str += "\n";
+                    global_symbol_table[ident] = symbol_t{val, symbol_tag::Symbol_Var};
+                }
+                else {
+                    str += "zeroinit\n";
+                    global_symbol_table[ident] = symbol_t{0, symbol_tag::Symbol_Var};
+                }
+            }
+        }
+        else if(type == VarDef_Arr_Init){
+            int arr_len = constexp->ConstCalc();
+            arr_init = initval->getArrInit();
+            int init_len = arr_init->size();
+            int rest_len = arr_len - init_len;
+            if(field == symbol_field::Field_Local) {
+                (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
+                    symbol_t{arr_len, symbol_tag::Symbol_Arr};
+                str += "\t@";
+                str += ident;
+                str += "_";
+                str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
+                str += " = alloc [i32, ";
+                str += std::to_string(arr_len);
+                str += "]\n";
+                for(int i = 0; i < init_len; ++i) {
+                    str += "\t\%";
+                    str += std::to_string(ast_i);
+                    str += " = getelemptr @";
+                    str += ident;
+                    str += "_";
+                    str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
+                    str += ", ";
+                    str += std::to_string(i);
+                    str += "\n";
+                    str += "\tstore ";
+                    str += std::to_string((*arr_init)[i]);
+                    str += ", \%";
+                    str += std::to_string(ast_i);
+                    str += "\n";
+                    ast_i++;
+                }
+                for(int i = 0; i < rest_len; ++i) {
+                    str += "\t\%";
+                    str += std::to_string(ast_i);
+                    str += " = getelemptr @";
+                    str += ident;
+                    str += "_";
+                    str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
+                    str += ", ";
+                    str += std::to_string(i + init_len);
+                    str += "\n";
+                    str += "\tstore ";
+                    str += std::to_string(0);
+                    str += ", \%";
+                    str += std::to_string(ast_i);
+                    str += "\n";
+                    ast_i++;
+                }
+            }
+            else {
+                global_symbol_table[ident] = symbol_t{arr_len, symbol_tag::Symbol_Arr};
+                str += "global @";
+                str += ident;
+                str += " = alloc [i32, ";
+                str += std::to_string(arr_len);
+                str += "], {";
+                if(init_len != 0) {
+                    str += std::to_string((*arr_init)[0]);
+                    for(int i = 1; i < init_len; ++i) {
+                        str += ", ";
+                        str += std::to_string((*arr_init)[i]);
+                    }
+                    for(int i = 0; i < rest_len; ++i) {
+                        str += ", ";
+                        str += std::to_string((*arr_init)[i]);
+                    }
+                }
+                else {
+                    str += std::to_string(0);
+                    for(int i = 1; i < rest_len; ++i) {
+                        str += ", ";
+                        str += std::to_string(0);
+                    }
+                }
+                str += "}\n";
+            }
+        }
+        else {
+            int arr_len = constexp->ConstCalc();
+            if(field == symbol_field::Field_Local) {
+                (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
+                    symbol_t{arr_len, symbol_tag::Symbol_Arr};
+                str += "\t@";
+                str += ident;
+                str += "_";
+                str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
+                str += " = alloc [i32, ";
+                str += std::to_string(arr_len);
+                str += "]\n";
+            }
+            else {
+                global_symbol_table[ident] = symbol_t{arr_len, symbol_tag::Symbol_Arr};
+                str += "global @";
+                str += ident;
+                str += " = alloc [i32, ";
+                str += std::to_string(arr_len);
+                str += "], zeroinit\n";
             }
         }
         return str;
@@ -1746,12 +2331,30 @@ class VarDefAST : public BaseAST {
     std::string getIdent() const override {
         return std::string();
     }
+
+    std::string getPointer() const override {
+        return std::string();
+    }
+
+    std::unique_ptr<std::vector<int> > getArrInit() const override {
+        std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        return arr_ptr; 
+    }
+};
+
+// InitVal Auxiliary data
+enum InitValType {
+    InitVal_Exp,
+    InitVal_Null,
+    InitVal_Vec
 };
 
 // InitVal
 class InitValAST : public BaseAST {
   public:
+    InitValType type;
     std::unique_ptr<BaseAST> exp;
+    std::unique_ptr<std::vector<std::unique_ptr<BaseAST> > > expvec;
 
     std::string DumpIR() const override {
         std::string str;
@@ -1765,5 +2368,23 @@ class InitValAST : public BaseAST {
 
     std::string getIdent() const override {
         return std::string();
+    }
+
+    std::string getPointer() const override {
+        return std::string();
+    }
+
+    std::unique_ptr<std::vector<int> > getArrInit() const override {
+        std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        if(type == InitVal_Vec) {
+            int vec_size = expvec->size();
+            for(int i = vec_size - 1; i >= 0; i--)
+                arr_ptr->push_back((*expvec)[i]->ConstCalc());
+        }
+        else if(type == InitVal_Exp) {
+            std::cerr << "Error: Invalid InitVal.\n";
+            assert(false);
+        }
+        return arr_ptr; 
     }
 };

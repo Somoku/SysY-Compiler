@@ -56,6 +56,7 @@ using namespace std;
 %type <int_val> Number
 %type <char_val> UnaryOp
 %type <vec_ast_val> ConstDefVec BlockItemVec VarDefVec FuncFParamVec FuncRParamVec
+                    ConstExpVec ExpVec
 
 %%
 
@@ -570,6 +571,15 @@ ConstDef
     auto ast = new ConstDefAST();
     ast->ident = *unique_ptr<string>($1);
     ast->constinitval = unique_ptr<BaseAST>($3);
+    ast->type = ConstDefType::ConstDef_Int;
+    $$ = ast;
+  }
+  | IDENT '[' ConstExp ']' '=' ConstInitVal {
+    auto ast = new ConstDefAST();
+    ast->ident = *unique_ptr<string>($1);
+    ast->constexp = unique_ptr<BaseAST>($3);
+    ast->constinitval = unique_ptr<BaseAST>($6);
+    ast->type = ConstDefType::ConstDef_Arr;
     $$ = ast;
   }
   ;
@@ -578,7 +588,34 @@ ConstInitVal
   : ConstExp {
     auto ast = new ConstInitValAST();
     ast->constexp = unique_ptr<BaseAST>($1);
+    ast->type = ConstInitValType::ConstInitVal_Exp;
     $$ = ast;
+  }
+  | '{' '}' {
+    auto ast = new ConstInitValAST();
+    ast->type = ConstInitValType::ConstInitVal_Null;
+    $$ = ast;
+  }
+  | '{' ConstExpVec '}' {
+    auto ast = new ConstInitValAST();
+    ast->constexpvec = unique_ptr<vector<unique_ptr<BaseAST> > >($2);
+    ast->type = ConstInitValType::ConstInitVal_Vec;
+    $$ = ast;
+  }
+  ;
+
+ConstExpVec
+  : ConstExp {
+    auto constexp = unique_ptr<BaseAST>($1);
+    auto constexpvec = new vector<unique_ptr<BaseAST> >();
+    constexpvec->push_back(move(constexp));
+    $$ = constexpvec;
+  }
+  | ConstExp ',' ConstExpVec {
+    auto constexp = unique_ptr<BaseAST>($1);
+    auto constexpvec = $3;
+    constexpvec->push_back(move(constexp));
+    $$ = constexpvec;
   }
   ;
 
@@ -630,6 +667,14 @@ LVal
   : IDENT {
     auto ast = new LValAST();
     ast->ident = *unique_ptr<string>($1);
+    ast->type = LValType::LVal_Int;
+    $$ = ast;
+  }
+  | IDENT '[' Exp ']' {
+    auto ast = new LValAST();
+    ast->ident = *unique_ptr<string>($1);
+    ast->exp = unique_ptr<BaseAST>($3);
+    ast->type = LValType::LVal_Arr;
     $$ = ast;
   }
   ;
@@ -669,15 +714,30 @@ VarDefVec
 VarDef
   : IDENT {
     auto ast = new VarDefAST();
-    ast->type = VarDefType::VarDef_NO_Init;
+    ast->type = VarDefType::VarDef_Int_NO_Init;
     ast->ident = *unique_ptr<string>($1);
     $$ = ast;
   }
   | IDENT '=' InitVal {
     auto ast = new VarDefAST();
-    ast->type = VarDefType::VarDef_Init;
+    ast->type = VarDefType::VarDef_Int_Init;
     ast->ident = *unique_ptr<string>($1);
     ast->initval = unique_ptr<BaseAST>($3);
+    $$ = ast;
+  }
+  | IDENT '[' ConstExp ']' {
+    auto ast = new VarDefAST();
+    ast->type = VarDefType::VarDef_Arr_NO_Init;
+    ast->ident = *unique_ptr<string>($1);
+    ast->constexp = unique_ptr<BaseAST>($3);
+    $$ = ast;
+  }
+  | IDENT '[' ConstExp ']' '=' InitVal {
+    auto ast = new VarDefAST();
+    ast->type = VarDefType::VarDef_Arr_Init;
+    ast->ident = *unique_ptr<string>($1);
+    ast->constexp = unique_ptr<BaseAST>($3);
+    ast->initval = unique_ptr<BaseAST>($6);
     $$ = ast;
   }
   ;
@@ -686,7 +746,34 @@ InitVal
   : Exp {
     auto ast = new InitValAST();
     ast->exp = unique_ptr<BaseAST>($1);
+    ast->type = InitValType::InitVal_Exp;
     $$ = ast;
+  }
+  | '{' '}' {
+    auto ast = new InitValAST();
+    ast->type = InitValType::InitVal_Null;
+    $$ = ast;
+  }
+  | '{' ExpVec '}' {
+    auto ast = new InitValAST();
+    ast->expvec = unique_ptr<vector<unique_ptr<BaseAST> > >($2);
+    ast->type = InitValType::InitVal_Vec;
+    $$ = ast;
+  }
+  ;
+
+ExpVec
+  : Exp {
+    auto exp = unique_ptr<BaseAST>($1);
+    auto expvec = new vector<unique_ptr<BaseAST> >();
+    expvec->push_back(move(exp));
+    $$ = expvec;
+  }
+  | Exp ',' ExpVec {
+    auto exp = unique_ptr<BaseAST>($1);
+    auto expvec = $3;
+    expvec->push_back(move(exp));
+    $$ = expvec;
   }
   ;
 %%
