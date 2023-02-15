@@ -28,7 +28,7 @@ class BaseAST {
     virtual int ConstCalc() const = 0;
     virtual std::string getIdent() const = 0;
     virtual std::string getPointer() const = 0;
-    virtual std::unique_ptr<std::vector<int> > getArrInit() const = 0;
+    virtual std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const = 0;
 };
 
 // CompUnitRoot
@@ -55,7 +55,7 @@ class CompUnitRootAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit() const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -120,7 +120,7 @@ class CompUnitAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit() const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -206,7 +206,7 @@ class FuncDefAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit() const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -244,20 +244,31 @@ class FuncTypeAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit() const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
 };
 
+// FuncFParam Auxiliary data
+enum FuncFParamType {
+    FuncFParam_Int,
+    FuncFParam_Arr_Sin,
+    FuncFParam_Arr_Mul
+};
+
 // FuncFParam
 class FuncFParamAST : public BaseAST {
   public:
+    FuncFParamType type;
     std::unique_ptr<BaseAST> btype;
     std::string ident;
+    std::unique_ptr<std::vector<std::unique_ptr<BaseAST> > >constexpvec;
 
     std::string DumpIR() const override {
         std::string str;
+        if(type == FuncFParam_Arr_Sin || type == FuncFParam_Arr_Mul)
+            assert(false);
         std::string param_ident = std::string("param_") + ident + "_" +
                                 std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
         str += "\t@";
@@ -296,7 +307,7 @@ class FuncFParamAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit() const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -338,7 +349,7 @@ class BlockAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit() const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -374,7 +385,7 @@ class StmtAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit() const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -531,7 +542,7 @@ class OpenStmtAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit() const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -664,7 +675,7 @@ class ClosedStmtAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit() const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -796,7 +807,7 @@ class NonIfStmtAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit() const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -825,7 +836,7 @@ class ExpAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit() const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -893,7 +904,7 @@ class PrimaryExpAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit() const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -1028,7 +1039,7 @@ class UnaryExpAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit() const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -1128,7 +1139,7 @@ class MulExpAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit() const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -1211,7 +1222,7 @@ class AddExpAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit() const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -1328,7 +1339,7 @@ class RelExpAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit() const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -1411,7 +1422,7 @@ class EqExpAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit() const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -1510,7 +1521,7 @@ class LAndExpAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit() const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -1609,7 +1620,7 @@ class LOrExpAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit() const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -1645,7 +1656,7 @@ class DeclAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit() const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -1677,7 +1688,7 @@ class ConstDeclAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit() const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -1705,7 +1716,7 @@ class BTypeAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit() const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -1723,12 +1734,13 @@ class ConstDefAST : public BaseAST {
     ConstDefType type;
     std::string ident;
     std::unique_ptr<BaseAST> constinitval;
-    std::unique_ptr<BaseAST> constexp;
+    std::unique_ptr<std::vector<std::unique_ptr<BaseAST> > > constexpvec;
 
     std::string DumpIR() const override {
         std::string str;
         std::unique_ptr<std::vector<int> > arr_init;
-        int const_val, arr_len, init_len, rest_len;
+        int const_val, arr_len, vec_size; // , init_len, rest_len;
+        std::vector<int> dim_vec;
         switch(type) {
             case ConstDef_Int:
                 const_val = ConstCalc();
@@ -1739,81 +1751,100 @@ class ConstDefAST : public BaseAST {
                     global_symbol_table[ident] = symbol_t{const_val, symbol_tag::Symbol_Const};
                 break;
             case ConstDef_Arr:
-                arr_len = constexp->ConstCalc();
-                arr_init = constinitval->getArrInit();
-                init_len = arr_init->size();
-                rest_len = arr_len - init_len;
+                vec_size = (*constexpvec).size();
+                arr_len = 1;
+                for(int i = 0; i < vec_size; ++i) {
+                    int dim = (*constexpvec)[i]->ConstCalc();
+                    dim_vec.push_back(dim);
+                    arr_len *= dim;
+                }
+                arr_init = constinitval->getArrInit(dim_vec);
                 if(field == symbol_field::Field_Local) {
                     (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
-                        symbol_t{arr_len, symbol_tag::Symbol_Const};
+                        symbol_t{arr_len, symbol_tag::Symbol_Arr};
                     str += "\t@";
                     str += ident;
                     str += "_";
                     str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
-                    str += " = alloc [i32, ";
-                    str += std::to_string(arr_len);
-                    str += "]\n";
-                    for(int i = 0; i < init_len; ++i) {
+                    str += " = alloc ";
+                    std::string dim_str;
+                    dim_str += ("[i32, " + std::to_string(dim_vec[0]) + "]");
+                    for(int i = 1; i < dim_vec.size(); ++i) 
+                        dim_str = "[" + dim_str + ", " + std::to_string(dim_vec[i]) + "]";
+                    str += dim_str;
+                    str += "\n";
+                    for(int i = 0; i < arr_len; ++i) {
+                        std::vector<int> arr_index;
+                        int index = i;
+                        int layer_size = arr_len / dim_vec[vec_size - 1];
+                        int k = 0;
+                        while(layer_size != 1) {
+                            arr_index.push_back(index / layer_size);
+                            index = index % layer_size;
+                            layer_size = layer_size / dim_vec[vec_size - 1 - (++k)];
+                        }
+                        arr_index.push_back(index);
+                        int arr_index_size = arr_index.size();
                         str += "\t\%";
-                        str += std::to_string(ast_i);
+                        str += std::to_string(ast_i++);
                         str += " = getelemptr @";
                         str += ident;
                         str += "_";
                         str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
                         str += ", ";
-                        str += std::to_string(i);
+                        str += std::to_string(arr_index[0]);
                         str += "\n";
+                        for(int j = 1; j < arr_index_size; ++j) {
+                            str += "\t\%";
+                            str += std::to_string(ast_i);
+                            str += " = getelemptr \%";
+                            str += std::to_string(ast_i - 1);
+                            str += ", ";
+                            str += std::to_string(arr_index[j]);
+                            str += "\n";
+                            ast_i++;
+                        }
                         str += "\tstore ";
                         str += std::to_string((*arr_init)[i]);
                         str += ", \%";
-                        str += std::to_string(ast_i);
+                        str += std::to_string(ast_i - 1);
                         str += "\n";
-                        ast_i++;
-                    }
-                    for(int i = 0; i < rest_len; ++i) {
-                        str += "\t\%";
-                        str += std::to_string(ast_i);
-                        str += " = getelemptr @";
-                        str += ident;
-                        str += "_";
-                        str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
-                        str += ", ";
-                        str += std::to_string(i + init_len);
-                        str += "\n";
-                        str += "\tstore ";
-                        str += std::to_string(0);
-                        str += ", \%";
-                        str += std::to_string(ast_i);
-                        str += "\n";
-                        ast_i++;
                     }
                 }
                 else {
                     global_symbol_table[ident] = symbol_t{arr_len, symbol_tag::Symbol_Arr};
                     str += "global @";
                     str += ident;
-                    str += " = alloc [i32, ";
-                    str += std::to_string(arr_len);
-                    str += "], {";
-                    if(init_len != 0) {
-                        str += std::to_string((*arr_init)[0]);
-                        for(int i = 1; i < init_len; ++i) {
-                            str += ", ";
-                            str += std::to_string((*arr_init)[i]);
+                    str += " = alloc ";
+                    std::string dim_str;
+                    dim_str += ("[i32, " + std::to_string(dim_vec[0]) + "]");
+                    for(int i = 1; i < dim_vec.size(); ++i) 
+                        dim_str = "[" + dim_str + ", " + std::to_string(dim_vec[i]) + "]";
+                    str += dim_str;
+                    str += ", ";
+                    std::vector<std::string> init_str_vec;
+                    std::vector<std::string> compress_init_str_vec;
+                    for(int i : (*arr_init)) init_str_vec.push_back(std::to_string(i));
+                    for(int i = 0; i < vec_size; ++i) {
+                        compress_init_str_vec.clear();
+                        int init_str_vec_size = init_str_vec.size();
+                        int index = 0;
+                        while(index < init_str_vec_size) {
+                            std::string init_str_set;
+                            init_str_set += "{";
+                            init_str_set += init_str_vec[index];
+                            for(int j = 1; j < dim_vec[i]; ++j) {
+                                init_str_set += ", ";
+                                init_str_set += init_str_vec[index + j];
+                            }
+                            init_str_set += "}";
+                            index += dim_vec[i];
+                            compress_init_str_vec.push_back(init_str_set);
                         }
-                        for(int i = 0; i < rest_len; ++i) {
-                            str += ", ";
-                            str += std::to_string((*arr_init)[i]);
-                        }
+                        init_str_vec = compress_init_str_vec;
                     }
-                    else {
-                        str += std::to_string(0);
-                        for(int i = 1; i < rest_len; ++i) {
-                            str += ", ";
-                            str += std::to_string(0);
-                        }
-                    }
-                    str += "}\n";
+                    str += init_str_vec[0];
+                    str += "\n";
                 }
                 break;
             default:
@@ -1834,7 +1865,7 @@ class ConstDefAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit() const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -1852,7 +1883,7 @@ class ConstInitValAST : public BaseAST {
   public:
     ConstInitValType type;
     std::unique_ptr<BaseAST> constexp;
-    std::unique_ptr<std::vector<std::unique_ptr<BaseAST> > > constexpvec;
+    std::unique_ptr<std::vector<std::unique_ptr<BaseAST> > > constinitvalvec;
 
     std::string DumpIR() const override {
         std::string str;
@@ -1871,17 +1902,57 @@ class ConstInitValAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit() const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        int arr_size = 1;
+        int elem_num = 0;
+        for(int i : dim_vec) arr_size *= i;
         if(type == ConstInitVal_Vec) {
-            int vec_size = constexpvec->size();
-            for(int i = vec_size - 1; i >= 0; i--)
-                arr_ptr->push_back((*constexpvec)[i]->ConstCalc());
+            int vec_size = constinitvalvec->size();
+            int dim_vec_size = dim_vec.size();
+            std::vector<int> new_dim_vec;
+            for(int i = vec_size - 1; i >= 0; i--) {
+                new_dim_vec.clear();
+                ConstInitValAST *constinitval = reinterpret_cast<ConstInitValAST *>
+                                                ((*constinitvalvec)[i].get());
+                if(constinitval->type == ConstInitValType::ConstInitVal_Vec) {
+                    if(elem_num == 0) {
+                        new_dim_vec = dim_vec;
+                        new_dim_vec.pop_back();
+                    }
+                    else {
+                        int layer = 0;
+                        int layer_size = 1;
+                        while(layer < dim_vec_size) {
+                            if(elem_num % layer_size == 0) {
+                                new_dim_vec.push_back(dim_vec[layer]);
+                                layer_size *= dim_vec[layer];
+                                layer++;
+                            }
+                            else break;
+                        }
+                    }
+                    if(new_dim_vec.empty()) {
+                        std::cerr << "Error: Invalid Array.\n";
+                        assert(false);
+                    }
+                    std::unique_ptr<std::vector<int> > new_arr = constinitval->getArrInit(new_dim_vec);
+                    arr_ptr->insert(arr_ptr->end(), new_arr->begin(), new_arr->end());
+                    elem_num = arr_ptr->size();
+                }
+                else if(constinitval->type == ConstInitValType::ConstInitVal_Exp) {
+                    arr_ptr->push_back(constinitval->ConstCalc());
+                    elem_num++;
+                    continue;
+                }
+            }
         }
         else if(type == ConstInitVal_Exp) {
             std::cerr << "Error: Invalid ConstInitVal.\n";
             assert(false);
         }
+        if(elem_num < arr_size)
+            for(int _ = elem_num; _ < arr_size; ++_) arr_ptr->push_back(0);
         return arr_ptr; 
     }
 };
@@ -1928,7 +1999,7 @@ class BlockItemAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit() const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -1945,7 +2016,7 @@ class LValAST : public BaseAST {
   public:
     LValType type;
     std::string ident;
-    std::unique_ptr<BaseAST> exp;
+    std::unique_ptr<std::vector<std::unique_ptr<BaseAST> > > expvec;
 
     std::string DumpIR() const override {
         std::string str;
@@ -2005,15 +2076,31 @@ class LValAST : public BaseAST {
         else {
             if(target_symbol_table == nullptr) {
                 if(global_symbol_table.find(ident) != global_symbol_table.end()) {
-                    str += exp->DumpIR();
+                    int expvec_size = expvec->size();
+                    std::vector<int> index_vec;
+                    for(int i = expvec_size - 1; i >= 0; i--) {
+                        str += (*expvec)[i]->DumpIR();
+                        index_vec.push_back(ast_i - 1);
+                    }
+                    int index_vec_size = index_vec.size();
                     str += "\t\%";
                     str += std::to_string(ast_i);
                     str += " = getelemptr @";
                     str += ident;
                     str += ", \%";
-                    str += std::to_string(ast_i - 1);
+                    str += std::to_string(index_vec[0]);
                     str += "\n";
                     ast_i++;
+                    for(int i = 1; i < index_vec_size; ++i) {
+                        str += "\t\%";
+                        str += std::to_string(ast_i);
+                        str += " = getelemptr \%";
+                        str += std::to_string(ast_i - 1);
+                        str += ", \%";
+                        str += std::to_string(index_vec[i]);
+                        str += "\n";
+                        ast_i++;
+                    }
                     str += "\t\%";
                     str += std::to_string(ast_i);
                     str += " = load \%";
@@ -2028,7 +2115,13 @@ class LValAST : public BaseAST {
             }
             else {
                 int symbol_num = target_symbol_table->symbol_table_ptr->symbol_table_num;
-                str += exp->DumpIR();
+                int expvec_size = expvec->size();
+                std::vector<int> index_vec;
+                for(int i = expvec_size - 1; i >= 0; i--) {
+                    str += (*expvec)[i]->DumpIR();
+                    index_vec.push_back(ast_i - 1);
+                }
+                int index_vec_size = index_vec.size();
                 str += "\t\%";
                 str += std::to_string(ast_i);
                 str += " = getelemptr @";
@@ -2036,9 +2129,19 @@ class LValAST : public BaseAST {
                 str += "_";
                 str += std::to_string(symbol_num);
                 str += ", \%";
-                str += std::to_string(ast_i - 1);
+                str += std::to_string(index_vec[0]);
                 str += "\n";
                 ast_i++;
+                for(int i = 1; i < index_vec_size; ++i) {
+                    str += "\t\%";
+                    str += std::to_string(ast_i);
+                    str += " = getelemptr \%";
+                    str += std::to_string(ast_i - 1);
+                    str += ", \%";
+                    str += std::to_string(index_vec[i]);
+                    str += "\n";
+                    ast_i++;
+                }
                 str += "\t\%";
                 str += std::to_string(ast_i);
                 str += " = load \%";
@@ -2068,15 +2171,31 @@ class LValAST : public BaseAST {
         symbol_table_list_elem_t *target_symbol_table = search_symbol_table(ident);
         if(target_symbol_table == nullptr) {
             if(global_symbol_table.find(ident) != global_symbol_table.end()) {
-                str += exp->DumpIR();
+                int expvec_size = expvec->size();
+                std::vector<int> index_vec;
+                for(int i = expvec_size - 1; i >= 0; i--) {
+                    str += (*expvec)[i]->DumpIR();
+                    index_vec.push_back(ast_i - 1);
+                }
+                int index_vec_size = index_vec.size();
                 str += "\t\%";
                 str += std::to_string(ast_i);
                 str += " = getelemptr @";
                 str += ident;
                 str += ", \%";
-                str += std::to_string(ast_i - 1);
+                str += std::to_string(index_vec[0]);
                 str += "\n";
                 ast_i++;
+                for(int i = 1; i < index_vec_size; ++i) {
+                    str += "\t\%";
+                    str += std::to_string(ast_i);
+                    str += " = getelemptr \%";
+                    str += std::to_string(ast_i - 1);
+                    str += ", \%";
+                    str += std::to_string(index_vec[i]);
+                    str += "\n";
+                    ast_i++;
+                }
             }
             else {
                 std::cerr << "Error: Can't find ident." << std::endl;
@@ -2085,7 +2204,13 @@ class LValAST : public BaseAST {
         }
         else {
             int symbol_num = target_symbol_table->symbol_table_ptr->symbol_table_num;
-            str += exp->DumpIR();
+            int expvec_size = expvec->size();
+            std::vector<int> index_vec;
+            for(int i = expvec_size - 1; i >= 0; i--) {
+                str += (*expvec)[i]->DumpIR();
+                index_vec.push_back(ast_i - 1);
+            }
+            int index_vec_size = index_vec.size();
             str += "\t\%";
             str += std::to_string(ast_i);
             str += " = getelemptr @";
@@ -2093,14 +2218,24 @@ class LValAST : public BaseAST {
             str += "_";
             str += std::to_string(symbol_num);
             str += ", \%";
-            str += std::to_string(ast_i - 1);
+            str += std::to_string(index_vec[0]);
             str += "\n";
             ast_i++;
+            for(int i = 1; i < index_vec_size; ++i) {
+                str += "\t\%";
+                str += std::to_string(ast_i);
+                str += " = getelemptr \%";
+                str += std::to_string(ast_i - 1);
+                str += ", \%";
+                str += std::to_string(index_vec[i]);
+                str += "\n";
+                ast_i++;
+            }
         }
         return str;
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit() const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -2128,7 +2263,7 @@ class ConstExpAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit() const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -2160,7 +2295,7 @@ class VarDeclAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit() const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -2180,7 +2315,7 @@ class VarDefAST : public BaseAST {
     VarDefType type;
     std::string ident;
     std::unique_ptr<BaseAST> initval;
-    std::unique_ptr<BaseAST> constexp;
+    std::unique_ptr<std::vector<std::unique_ptr<BaseAST> > > constexpvec;
 
     std::string DumpIR() const override {
         std::string str;
@@ -2222,10 +2357,15 @@ class VarDefAST : public BaseAST {
             }
         }
         else if(type == VarDef_Arr_Init){
-            int arr_len = constexp->ConstCalc();
-            arr_init = initval->getArrInit();
-            int init_len = arr_init->size();
-            int rest_len = arr_len - init_len;
+            int vec_size = (*constexpvec).size();
+            int arr_len = 1;
+            std::vector<int> dim_vec;
+            for(int i = 0; i < vec_size; ++i) {
+                int dim = (*constexpvec)[i]->ConstCalc();
+                dim_vec.push_back(dim);
+                arr_len *= dim;
+            }
+            arr_init = initval->getArrInit(dim_vec);
             if(field == symbol_field::Field_Local) {
                 (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
                     symbol_t{arr_len, symbol_tag::Symbol_Arr};
@@ -2233,74 +2373,96 @@ class VarDefAST : public BaseAST {
                 str += ident;
                 str += "_";
                 str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
-                str += " = alloc [i32, ";
-                str += std::to_string(arr_len);
-                str += "]\n";
-                for(int i = 0; i < init_len; ++i) {
+                str += " = alloc ";
+                std::string dim_str;
+                dim_str += ("[i32, " + std::to_string(dim_vec[0]) + "]");
+                for(int i = 1; i < dim_vec.size(); ++i) 
+                    dim_str = "[" + dim_str + ", " + std::to_string(dim_vec[i]) + "]";
+                str += dim_str;
+                str += "\n";
+                for(int i = 0; i < arr_len; ++i) {
+                    std::vector<int> arr_index;
+                    int index = i;
+                    int layer_size = arr_len / dim_vec[vec_size - 1];
+                    int k = 0;
+                    while(layer_size != 1) {
+                        arr_index.push_back(index / layer_size);
+                        index = index % layer_size;
+                        layer_size = layer_size / dim_vec[vec_size - 1 - (++k)];
+                    }
+                    arr_index.push_back(index);
+                    int arr_index_size = arr_index.size();
                     str += "\t\%";
-                    str += std::to_string(ast_i);
+                    str += std::to_string(ast_i++);
                     str += " = getelemptr @";
                     str += ident;
                     str += "_";
                     str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
                     str += ", ";
-                    str += std::to_string(i);
+                    str += std::to_string(arr_index[0]);
                     str += "\n";
+                    for(int j = 1; j < arr_index_size; ++j) {
+                        str += "\t\%";
+                        str += std::to_string(ast_i);
+                        str += " = getelemptr \%";
+                        str += std::to_string(ast_i - 1);
+                        str += ", ";
+                        str += std::to_string(arr_index[j]);
+                        str += "\n";
+                        ast_i++;
+                    }
                     str += "\tstore ";
                     str += std::to_string((*arr_init)[i]);
                     str += ", \%";
-                    str += std::to_string(ast_i);
+                    str += std::to_string(ast_i - 1);
                     str += "\n";
-                    ast_i++;
-                }
-                for(int i = 0; i < rest_len; ++i) {
-                    str += "\t\%";
-                    str += std::to_string(ast_i);
-                    str += " = getelemptr @";
-                    str += ident;
-                    str += "_";
-                    str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
-                    str += ", ";
-                    str += std::to_string(i + init_len);
-                    str += "\n";
-                    str += "\tstore ";
-                    str += std::to_string(0);
-                    str += ", \%";
-                    str += std::to_string(ast_i);
-                    str += "\n";
-                    ast_i++;
                 }
             }
             else {
                 global_symbol_table[ident] = symbol_t{arr_len, symbol_tag::Symbol_Arr};
                 str += "global @";
                 str += ident;
-                str += " = alloc [i32, ";
-                str += std::to_string(arr_len);
-                str += "], {";
-                if(init_len != 0) {
-                    str += std::to_string((*arr_init)[0]);
-                    for(int i = 1; i < init_len; ++i) {
-                        str += ", ";
-                        str += std::to_string((*arr_init)[i]);
+                str += " = alloc ";
+                std::string dim_str;
+                dim_str += ("[i32, " + std::to_string(dim_vec[0]) + "]");
+                for(int i = 1; i < dim_vec.size(); ++i) 
+                    dim_str = "[" + dim_str + ", " + std::to_string(dim_vec[i]) + "]";
+                str += dim_str;
+                str += ", ";
+                std::vector<std::string> init_str_vec;
+                std::vector<std::string> compress_init_str_vec;
+                for(int i : (*arr_init)) init_str_vec.push_back(std::to_string(i));
+                for(int i = 0; i < vec_size; ++i) {
+                    compress_init_str_vec.clear();
+                    int init_str_vec_size = init_str_vec.size();
+                    int index = 0;
+                    while(index < init_str_vec_size) {
+                        std::string init_str_set;
+                        init_str_set += "{";
+                        init_str_set += init_str_vec[index];
+                        for(int j = 1; j < dim_vec[i]; ++j) {
+                            init_str_set += ", ";
+                            init_str_set += init_str_vec[index + j];
+                        }
+                        init_str_set += "}";
+                        index += dim_vec[i];
+                        compress_init_str_vec.push_back(init_str_set);
                     }
-                    for(int i = 0; i < rest_len; ++i) {
-                        str += ", ";
-                        str += std::to_string((*arr_init)[i]);
-                    }
+                    init_str_vec = compress_init_str_vec;
                 }
-                else {
-                    str += std::to_string(0);
-                    for(int i = 1; i < rest_len; ++i) {
-                        str += ", ";
-                        str += std::to_string(0);
-                    }
-                }
-                str += "}\n";
+                str += init_str_vec[0];
+                str += "\n";
             }
         }
         else {
-            int arr_len = constexp->ConstCalc();
+            int vec_size = (*constexpvec).size();
+            int arr_len = 1;
+            std::vector<int> dim_vec;
+            for(int i = 0; i < vec_size; ++i) {
+                int dim = (*constexpvec)[i]->ConstCalc();
+                dim_vec.push_back(dim);
+                arr_len *= dim;
+            }
             if(field == symbol_field::Field_Local) {
                 (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
                     symbol_t{arr_len, symbol_tag::Symbol_Arr};
@@ -2308,17 +2470,25 @@ class VarDefAST : public BaseAST {
                 str += ident;
                 str += "_";
                 str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
-                str += " = alloc [i32, ";
-                str += std::to_string(arr_len);
-                str += "]\n";
+                str += " = alloc ";
+                std::string dim_str;
+                dim_str += ("[i32, " + std::to_string(dim_vec[0]) + "]");
+                for(int i = 1; i < dim_vec.size(); ++i) 
+                    dim_str = "[" + dim_str + ", " + std::to_string(dim_vec[i]) + "]";
+                str += dim_str;
+                str += "\n";
             }
             else {
                 global_symbol_table[ident] = symbol_t{arr_len, symbol_tag::Symbol_Arr};
                 str += "global @";
                 str += ident;
-                str += " = alloc [i32, ";
-                str += std::to_string(arr_len);
-                str += "], zeroinit\n";
+                str += " = alloc ";
+                std::string dim_str;
+                dim_str += ("[i32, " + std::to_string(dim_vec[0]) + "]");
+                for(int i = 1; i < dim_vec.size(); ++i) 
+                    dim_str = "[" + dim_str + ", " + std::to_string(dim_vec[i]) + "]";
+                str += dim_str;
+                str += ", zeroinit\n";
             }
         }
         return str;
@@ -2336,7 +2506,7 @@ class VarDefAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit() const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -2354,7 +2524,7 @@ class InitValAST : public BaseAST {
   public:
     InitValType type;
     std::unique_ptr<BaseAST> exp;
-    std::unique_ptr<std::vector<std::unique_ptr<BaseAST> > > expvec;
+    std::unique_ptr<std::vector<std::unique_ptr<BaseAST> > > initvalvec;
 
     std::string DumpIR() const override {
         std::string str;
@@ -2374,17 +2544,57 @@ class InitValAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit() const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
+        int arr_size = 1;
+        int elem_num = 0;
+        for(int i : dim_vec) arr_size *= i;
         if(type == InitVal_Vec) {
-            int vec_size = expvec->size();
-            for(int i = vec_size - 1; i >= 0; i--)
-                arr_ptr->push_back((*expvec)[i]->ConstCalc());
+            int vec_size = initvalvec->size();
+            int dim_vec_size = dim_vec.size();
+            std::vector<int> new_dim_vec;
+            for(int i = vec_size - 1; i >= 0; i--) {
+                new_dim_vec.clear();
+                InitValAST *initval = reinterpret_cast<InitValAST *>
+                                                ((*initvalvec)[i].get());
+                if(initval->type == InitValType::InitVal_Vec) {
+                    if(elem_num == 0) {
+                        new_dim_vec = dim_vec;
+                        new_dim_vec.pop_back();
+                    }
+                    else {
+                        int layer = 0;
+                        int layer_size = 1;
+                        while(layer < dim_vec_size) {
+                            if(elem_num % layer_size == 0) {
+                                new_dim_vec.push_back(dim_vec[layer]);
+                                layer_size *= dim_vec[layer];
+                                layer++;
+                            }
+                            else break;
+                        }
+                    }
+                    if(new_dim_vec.empty()) {
+                        std::cerr << "Error: Invalid Array.\n";
+                        assert(false);
+                    }
+                    std::unique_ptr<std::vector<int> > new_arr = initval->getArrInit(new_dim_vec);
+                    arr_ptr->insert(arr_ptr->end(), new_arr->begin(), new_arr->end());
+                    elem_num = arr_ptr->size();
+                }
+                else if(initval->type == InitValType::InitVal_Exp) {
+                    arr_ptr->push_back(initval->ConstCalc());
+                    elem_num++;
+                    continue;
+                }
+            }
         }
         else if(type == InitVal_Exp) {
-            std::cerr << "Error: Invalid InitVal.\n";
+            std::cerr << "Error: Invalid ConstInitVal.\n";
             assert(false);
         }
+        if(elem_num < arr_size)
+            for(int _ = elem_num; _ < arr_size; ++_) arr_ptr->push_back(0);
         return arr_ptr; 
     }
 };
