@@ -14,7 +14,8 @@ enum symbol_tag {
     Symbol_Const,
     Symbol_Var,
     Symbol_Func,
-    Symbol_Arr
+    Symbol_Arr,
+    Symbol_Pointer
 };
 
 struct symbol_t {

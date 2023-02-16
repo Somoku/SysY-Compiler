@@ -698,6 +698,7 @@ LVal
   : IDENT {
     auto ast = new LValAST();
     ast->ident = *unique_ptr<string>($1);
+    ast->expvec = nullptr;
     ast->type = LValType::LVal_Int;
     $$ = ast;
   }

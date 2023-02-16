@@ -15,6 +15,8 @@ static int while_id = 0;
 static int entry_id = 0;
 static bool block_ret = false;
 static bool block_jump = false;
+static bool is_param_r = false;
+static bool is_all_layer = false;
 static symbol_field field = symbol_field::Field_Global;
 static std::vector<int> while_id_vec;
 extern symbol_table_list_elem_t *curr_symbol_table;
@@ -267,24 +269,73 @@ class FuncFParamAST : public BaseAST {
 
     std::string DumpIR() const override {
         std::string str;
-        if(type == FuncFParam_Arr_Sin || type == FuncFParam_Arr_Mul)
-            assert(false);
         std::string param_ident = std::string("param_") + ident + "_" +
-                                std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
-        str += "\t@";
-        str += ident;
-        str += "_";
-        str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
-        str += " = alloc i32\n";
-        str += "\tstore @";
-        str += param_ident;
-        str += ", @";
-        str += ident;
-        str += "_";
-        str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
-        str += "\n";
-        (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
-            symbol_t{-1, symbol_tag::Symbol_Var};
+                        std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
+        int vec_size;
+        std::vector<int> dim_vec;
+        std::string dim_str;
+        switch(type) {
+            case FuncFParam_Int:
+                str += "\t@";
+                str += ident;
+                str += "_";
+                str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
+                str += " = alloc i32\n";
+                str += "\tstore @";
+                str += param_ident;
+                str += ", @";
+                str += ident;
+                str += "_";
+                str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
+                str += "\n";
+                (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
+                    symbol_t{-1, symbol_tag::Symbol_Var};
+                break;
+            case FuncFParam_Arr_Sin:
+                str += "\t@";
+                str += ident;
+                str += "_";
+                str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
+                str += " = alloc *i32\n";
+                str += "\tstore @";
+                str += param_ident;
+                str += ", @";
+                str += ident;
+                str += "_";
+                str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
+                str += "\n";
+                (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
+                    symbol_t{1, symbol_tag::Symbol_Pointer};
+                break;
+            case FuncFParam_Arr_Mul:
+                vec_size = (*constexpvec).size();
+                for(int i = 0; i < vec_size; ++i) {
+                    int dim = (*constexpvec)[i]->ConstCalc();
+                    dim_vec.push_back(dim);
+                }
+                str += "\t@";
+                str += ident;
+                str += "_";
+                str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
+                str += " = alloc *";
+                dim_str += ("[i32, " + std::to_string(dim_vec[0]) + "]");
+                for(int i = 1; i < dim_vec.size(); ++i) 
+                    dim_str = "[" + dim_str + ", " + std::to_string(dim_vec[i]) + "]";
+                str += dim_str;
+                str += "\n";
+                str += "\tstore @";
+                str += param_ident;
+                str += ", @";
+                str += ident;
+                str += "_";
+                str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
+                str += "\n";
+                (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
+                    symbol_t{(int)(dim_vec.size()) + 1, symbol_tag::Symbol_Pointer};
+                break;
+            default:
+                assert(false);
+        }
         return str;
     }
 
@@ -294,12 +345,43 @@ class FuncFParamAST : public BaseAST {
 
     std::string getIdent() const override {
         std::string str;
-        std::string param_ident = std::string("param_") + ident;
-        str += "@param_";
-        str += ident;
-        str += "_";
-        str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
-        str += ": i32";
+        int vec_size;
+        std::vector<int> dim_vec;
+        std::string dim_str;
+        switch(type) {
+            case FuncFParam_Int:
+                str += "@param_";
+                str += ident;
+                str += "_";
+                str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
+                str += ": i32";
+                break;
+            case FuncFParam_Arr_Sin:
+                str += "@param_";
+                str += ident;
+                str += "_";
+                str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
+                str += ": *i32";
+                break;
+            case FuncFParam_Arr_Mul:
+                vec_size = (*constexpvec).size();
+                for(int i = 0; i < vec_size; ++i) {
+                    int dim = (*constexpvec)[i]->ConstCalc();
+                    dim_vec.push_back(dim);
+                }
+                str += "@param_";
+                str += ident;
+                str += "_";
+                str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
+                str += ": *";
+                dim_str += ("[i32, " + std::to_string(dim_vec[0]) + "]");
+                for(int i = 1; i < dim_vec.size(); ++i) 
+                    dim_str = "[" + dim_str + ", " + std::to_string(dim_vec[i]) + "]";
+                str += dim_str;
+                break;
+            default:
+                assert(false);
+        }
         return str;
     }
 
@@ -751,6 +833,14 @@ class NonIfStmtAST : public BaseAST {
                         str += std::to_string(ast_i - 1);
                         str += "\n";
                         break;
+                    case Symbol_Pointer:
+                        str += lval->getPointer();
+                        str += "\tstore \%";
+                        str += std::to_string(store_src);
+                        str += ", \%";
+                        str += std::to_string(ast_i - 1);
+                        str += "\n";
+                        break;
                     default:
                         assert(false);
                 }
@@ -970,11 +1060,13 @@ class UnaryExpAST : public BaseAST {
                 break;
             case Unary_Param:
                 vec_size = funcrparamvec->size();
+                is_param_r = true;
                 for(int i = vec_size - 1; i > 0; i--) {
                     str += (*funcrparamvec)[i]->DumpIR();
                     param_ast_i.push_back(ast_i - 1);
                 }
                 str += (*funcrparamvec)[0]->DumpIR();
+                is_param_r = false;
                 param_ast_i.push_back(ast_i - 1);
                 if(global_symbol_table[ident].value == FuncTypeType::FuncType_VOID) {
                     str += "\tcall @";
@@ -1739,7 +1831,7 @@ class ConstDefAST : public BaseAST {
     std::string DumpIR() const override {
         std::string str;
         std::unique_ptr<std::vector<int> > arr_init;
-        int const_val, arr_len, vec_size; // , init_len, rest_len;
+        int const_val, arr_len, vec_size;
         std::vector<int> dim_vec;
         switch(type) {
             case ConstDef_Int:
@@ -1761,7 +1853,7 @@ class ConstDefAST : public BaseAST {
                 arr_init = constinitval->getArrInit(dim_vec);
                 if(field == symbol_field::Field_Local) {
                     (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
-                        symbol_t{arr_len, symbol_tag::Symbol_Arr};
+                        symbol_t{(int)(dim_vec.size()), symbol_tag::Symbol_Arr};
                     str += "\t@";
                     str += ident;
                     str += "_";
@@ -1812,7 +1904,7 @@ class ConstDefAST : public BaseAST {
                     }
                 }
                 else {
-                    global_symbol_table[ident] = symbol_t{arr_len, symbol_tag::Symbol_Arr};
+                    global_symbol_table[ident] = symbol_t{(int)dim_vec.size(), symbol_tag::Symbol_Arr};
                     str += "global @";
                     str += ident;
                     str += " = alloc ";
@@ -2043,6 +2135,22 @@ class LValAST : public BaseAST {
                         str += "\n";
                         ast_i++;
                     }
+                    else if(symbol.tag == symbol_tag::Symbol_Arr) {
+                        str += "\t\%";
+                        str += std::to_string(ast_i);
+                        str += " = getelemptr @";
+                        str += ident;
+                        str += ", 0\n";
+                        ast_i++;
+                    }
+                    else {
+                        str += "\t\%";
+                        str += std::to_string(ast_i);
+                        str += " = load @";
+                        str += ident;
+                        str += "\n";
+                        ast_i++;
+                    }
                 }
                 else {
                     std::cerr << "Error: Can't find ident." << std::endl;
@@ -2071,42 +2179,48 @@ class LValAST : public BaseAST {
                     str += "\n";
                     ast_i++;
                 }
+                else if(symbol.tag == symbol_tag::Symbol_Arr) {
+                    str += "\t\%";
+                    str += std::to_string(ast_i);
+                    str += " = getelemptr @";
+                    str += ident;
+                    str += "_";
+                    str += std::to_string(symbol_num);
+                    str += ", 0\n";
+                    ast_i++;
+                }
+                else {
+                    str += "\t\%";
+                    str += std::to_string(ast_i);
+                    str += " = load @";
+                    str += ident;
+                    str += "_";
+                    str += std::to_string(symbol_num);
+                    str += "\n";
+                    ast_i++;
+                }
             }
         }
         else {
             if(target_symbol_table == nullptr) {
                 if(global_symbol_table.find(ident) != global_symbol_table.end()) {
-                    int expvec_size = expvec->size();
-                    std::vector<int> index_vec;
-                    for(int i = expvec_size - 1; i >= 0; i--) {
-                        str += (*expvec)[i]->DumpIR();
-                        index_vec.push_back(ast_i - 1);
-                    }
-                    int index_vec_size = index_vec.size();
-                    str += "\t\%";
-                    str += std::to_string(ast_i);
-                    str += " = getelemptr @";
-                    str += ident;
-                    str += ", \%";
-                    str += std::to_string(index_vec[0]);
-                    str += "\n";
-                    ast_i++;
-                    for(int i = 1; i < index_vec_size; ++i) {
+                    str += getPointer();
+                    if(is_param_r && !is_all_layer) {
                         str += "\t\%";
                         str += std::to_string(ast_i);
                         str += " = getelemptr \%";
                         str += std::to_string(ast_i - 1);
-                        str += ", \%";
-                        str += std::to_string(index_vec[i]);
+                        str += ", 0\n";
+                        ast_i++;
+                    }
+                    else {
+                        str += "\t\%";
+                        str += std::to_string(ast_i);
+                        str += " = load \%";
+                        str += std::to_string(ast_i - 1);
                         str += "\n";
                         ast_i++;
                     }
-                    str += "\t\%";
-                    str += std::to_string(ast_i);
-                    str += " = load \%";
-                    str += std::to_string(ast_i - 1);
-                    str += "\n";
-                    ast_i++;
                 }
                 else {
                     std::cerr << "Error: Can't find ident." << std::endl;
@@ -2114,40 +2228,23 @@ class LValAST : public BaseAST {
                 }
             }
             else {
-                int symbol_num = target_symbol_table->symbol_table_ptr->symbol_table_num;
-                int expvec_size = expvec->size();
-                std::vector<int> index_vec;
-                for(int i = expvec_size - 1; i >= 0; i--) {
-                    str += (*expvec)[i]->DumpIR();
-                    index_vec.push_back(ast_i - 1);
-                }
-                int index_vec_size = index_vec.size();
-                str += "\t\%";
-                str += std::to_string(ast_i);
-                str += " = getelemptr @";
-                str += ident;
-                str += "_";
-                str += std::to_string(symbol_num);
-                str += ", \%";
-                str += std::to_string(index_vec[0]);
-                str += "\n";
-                ast_i++;
-                for(int i = 1; i < index_vec_size; ++i) {
+                str += getPointer();
+                if(is_param_r && !is_all_layer) {
                     str += "\t\%";
                     str += std::to_string(ast_i);
                     str += " = getelemptr \%";
                     str += std::to_string(ast_i - 1);
-                    str += ", \%";
-                    str += std::to_string(index_vec[i]);
+                    str += ", 0\n";
+                    ast_i++;
+                }
+                else {
+                    str += "\t\%";
+                    str += std::to_string(ast_i);
+                    str += " = load \%";
+                    str += std::to_string(ast_i - 1);
                     str += "\n";
                     ast_i++;
                 }
-                str += "\t\%";
-                str += std::to_string(ast_i);
-                str += " = load \%";
-                str += std::to_string(ast_i - 1);
-                str += "\n";
-                ast_i++;
             }
         }
         return str;
@@ -2171,6 +2268,7 @@ class LValAST : public BaseAST {
         symbol_table_list_elem_t *target_symbol_table = search_symbol_table(ident);
         if(target_symbol_table == nullptr) {
             if(global_symbol_table.find(ident) != global_symbol_table.end()) {
+                symbol_tag tag = global_symbol_table[ident].tag;
                 int expvec_size = expvec->size();
                 std::vector<int> index_vec;
                 for(int i = expvec_size - 1; i >= 0; i--) {
@@ -2178,10 +2276,82 @@ class LValAST : public BaseAST {
                     index_vec.push_back(ast_i - 1);
                 }
                 int index_vec_size = index_vec.size();
+                if(expvec_size == global_symbol_table[ident].value)
+                    is_all_layer = true;
+                else
+                    is_all_layer = false;
+                if(tag == Symbol_Arr){
+                    str += "\t\%";
+                    str += std::to_string(ast_i);
+                    str += " = getelemptr @";
+                    str += ident;
+                    str += ", \%";
+                    str += std::to_string(index_vec[0]);
+                    str += "\n";
+                    ast_i++;
+                    for(int i = 1; i < index_vec_size; ++i) {
+                        str += "\t\%";
+                        str += std::to_string(ast_i);
+                        str += " = getelemptr \%";
+                        str += std::to_string(ast_i - 1);
+                        str += ", \%";
+                        str += std::to_string(index_vec[i]);
+                        str += "\n";
+                        ast_i++;
+                    }
+                }
+                else if(tag == Symbol_Pointer) {
+                    str += "\t\%";
+                    str += std::to_string(ast_i++);
+                    str += " = load @";
+                    str += ident;
+                    str += "\n";
+                    str += "\t\%";
+                    str += std::to_string(ast_i);
+                    str += " = getptr \%";
+                    str += std::to_string(ast_i - 1);
+                    str += ", \%";
+                    str += std::to_string(index_vec[0]);
+                    str += "\n";
+                    ast_i++;
+                    for(int i = 1; i < index_vec_size; ++i) {
+                        str += "\t\%";
+                        str += std::to_string(ast_i);
+                        str += " = getelemptr \%";
+                        str += std::to_string(ast_i - 1);
+                        str += ", \%";
+                        str += std::to_string(index_vec[i]);
+                        str += "\n";
+                        ast_i++;
+                    }
+                }
+            }
+            else {
+                std::cerr << "Error: Can't find ident." << std::endl;
+                assert(false);
+            }
+        }
+        else {
+            symbol_tag tag = (*(target_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident].tag;
+            int symbol_num = target_symbol_table->symbol_table_ptr->symbol_table_num;
+            int expvec_size = expvec->size();
+            std::vector<int> index_vec;
+            for(int i = expvec_size - 1; i >= 0; i--) {
+                str += (*expvec)[i]->DumpIR();
+                index_vec.push_back(ast_i - 1);
+            }
+            int index_vec_size = index_vec.size();
+            if(expvec_size == (*(target_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident].value)
+                is_all_layer = true;
+            else
+                is_all_layer = false;
+            if(tag == Symbol_Arr) {
                 str += "\t\%";
                 str += std::to_string(ast_i);
                 str += " = getelemptr @";
                 str += ident;
+                str += "_";
+                str += std::to_string(symbol_num);
                 str += ", \%";
                 str += std::to_string(index_vec[0]);
                 str += "\n";
@@ -2197,39 +2367,32 @@ class LValAST : public BaseAST {
                     ast_i++;
                 }
             }
-            else {
-                std::cerr << "Error: Can't find ident." << std::endl;
-                assert(false);
-            }
-        }
-        else {
-            int symbol_num = target_symbol_table->symbol_table_ptr->symbol_table_num;
-            int expvec_size = expvec->size();
-            std::vector<int> index_vec;
-            for(int i = expvec_size - 1; i >= 0; i--) {
-                str += (*expvec)[i]->DumpIR();
-                index_vec.push_back(ast_i - 1);
-            }
-            int index_vec_size = index_vec.size();
-            str += "\t\%";
-            str += std::to_string(ast_i);
-            str += " = getelemptr @";
-            str += ident;
-            str += "_";
-            str += std::to_string(symbol_num);
-            str += ", \%";
-            str += std::to_string(index_vec[0]);
-            str += "\n";
-            ast_i++;
-            for(int i = 1; i < index_vec_size; ++i) {
+            else if(tag == Symbol_Pointer) {
+                str += "\t\%";
+                str += std::to_string(ast_i++);
+                str += " = load @";
+                str += ident;
+                str += "_";
+                str += std::to_string(symbol_num);
+                str += "\n";
                 str += "\t\%";
                 str += std::to_string(ast_i);
-                str += " = getelemptr \%";
+                str += " = getptr \%";
                 str += std::to_string(ast_i - 1);
                 str += ", \%";
-                str += std::to_string(index_vec[i]);
+                str += std::to_string(index_vec[0]);
                 str += "\n";
                 ast_i++;
+                for(int i = 1; i < index_vec_size; ++i) {
+                    str += "\t\%";
+                    str += std::to_string(ast_i);
+                    str += " = getelemptr \%";
+                    str += std::to_string(ast_i - 1);
+                    str += ", \%";
+                    str += std::to_string(index_vec[i]);
+                    str += "\n";
+                    ast_i++;
+                }
             }
         }
         return str;
@@ -2368,7 +2531,7 @@ class VarDefAST : public BaseAST {
             arr_init = initval->getArrInit(dim_vec);
             if(field == symbol_field::Field_Local) {
                 (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
-                    symbol_t{arr_len, symbol_tag::Symbol_Arr};
+                    symbol_t{(int)(dim_vec.size()), symbol_tag::Symbol_Arr};
                 str += "\t@";
                 str += ident;
                 str += "_";
@@ -2419,7 +2582,7 @@ class VarDefAST : public BaseAST {
                 }
             }
             else {
-                global_symbol_table[ident] = symbol_t{arr_len, symbol_tag::Symbol_Arr};
+                global_symbol_table[ident] = symbol_t{(int)(dim_vec.size()), symbol_tag::Symbol_Arr};
                 str += "global @";
                 str += ident;
                 str += " = alloc ";
@@ -2456,16 +2619,14 @@ class VarDefAST : public BaseAST {
         }
         else {
             int vec_size = (*constexpvec).size();
-            int arr_len = 1;
             std::vector<int> dim_vec;
             for(int i = 0; i < vec_size; ++i) {
                 int dim = (*constexpvec)[i]->ConstCalc();
                 dim_vec.push_back(dim);
-                arr_len *= dim;
             }
             if(field == symbol_field::Field_Local) {
                 (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
-                    symbol_t{arr_len, symbol_tag::Symbol_Arr};
+                    symbol_t{(int)(dim_vec.size()), symbol_tag::Symbol_Arr};
                 str += "\t@";
                 str += ident;
                 str += "_";
@@ -2479,7 +2640,7 @@ class VarDefAST : public BaseAST {
                 str += "\n";
             }
             else {
-                global_symbol_table[ident] = symbol_t{arr_len, symbol_tag::Symbol_Arr};
+                global_symbol_table[ident] = symbol_t{(int)(dim_vec.size()), symbol_tag::Symbol_Arr};
                 str += "global @";
                 str += ident;
                 str += " = alloc ";
