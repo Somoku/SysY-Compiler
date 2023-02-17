@@ -14,9 +14,6 @@ koopa_raw_program_t generate_raw(const char *str, koopa_raw_program_builder_t bu
     koopa_error_code_t ret = koopa_parse_from_string(str, &program);
     assert(ret == KOOPA_EC_SUCCESS);  // 确保解析时没有出错
     
-    // 创建一个 raw program builder, 用来构建 raw program
-    // koopa_raw_program_builder_t builder = koopa_new_raw_program_builder();
-    
     // 将 Koopa IR 程序转换为 raw program
     koopa_raw_program_t raw = koopa_build_raw_program(builder, program);
     
@@ -126,7 +123,6 @@ void Visit(const koopa_raw_basic_block_t &bb, int st_offset, int &st_id, bool RA
 void Visit(const koopa_raw_value_t &value, int st_offset, int &st_id, bool RA_call) {
   // 根据指令类型判断后续需要如何访问
   const auto &kind = value->kind;
-  // std::cout << "# kind.tag = " << kind.tag << std::endl;
   switch (kind.tag) {
     case KOOPA_RVT_RETURN:
       // 访问 return 指令
@@ -148,7 +144,7 @@ void Visit(const koopa_raw_value_t &value, int st_offset, int &st_id, bool RA_ca
       stack_offset[value] = Visit(kind.data.load, st_id);
       break;
     case KOOPA_RVT_ALLOC:
-      // 暂时不处理 alloc, 为避免报错
+      Visit(value, st_id);
       break;
     case KOOPA_RVT_GLOBAL_ALLOC:
       std::cout << "\t.globl " << value->name + 1 << std::endl;
@@ -170,6 +166,16 @@ void Visit(const koopa_raw_value_t &value, int st_offset, int &st_id, bool RA_ca
         std::cout << "\tsw a0, (t6)\n";
         st_id += 4;
       }
+      break;
+    case KOOPA_RVT_GET_ELEM_PTR:
+      Visit(kind.data.get_elem_ptr, st_id);
+      stack_offset[value] = st_id;
+      st_id += 4;
+      break;
+    case KOOPA_RVT_GET_PTR:
+      Visit(kind.data.get_ptr, st_id);
+      stack_offset[value] = st_id;
+      st_id += 4;
       break;
     default:
       // 其他类型暂时遇不到
@@ -365,6 +371,17 @@ void Visit(const koopa_raw_store_t &store, int &st_id, int st_offset) {
     std::cout << "\tla t6, " << store.dest->name + 1 << std::endl;
     std::cout << "\tsw t0, (t6)\n";
   }
+  else if(store.dest->kind.tag == KOOPA_RVT_GET_ELEM_PTR ||
+          store.dest->kind.tag == KOOPA_RVT_GET_PTR) {
+    if(stack_offset[store.dest] == 0)
+      std::cout << "\tlw t6, (sp)\n";
+    else {
+      std::cout << "\tli t6, " << stack_offset[store.dest] << std::endl;
+      std::cout << "\tadd t6, t6, sp\n";
+      std::cout << "\tlw t5, (t6)\n";
+    }
+    std::cout << "\tsw t0, (t5)\n";
+  }
   else {
     if(stack_offset.find(store.dest) == stack_offset.end()) {
       stack_offset[store.dest] = st_id;
@@ -387,18 +404,47 @@ int Visit(const koopa_raw_load_t &load, int &st_id) {
     st_id += 4;
     return st_id - 4;
   }
+  else if(load.src->kind.tag == KOOPA_RVT_GET_ELEM_PTR ||
+          load.src->kind.tag == KOOPA_RVT_GET_PTR) {
+    if(stack_offset[load.src] == 0)
+      std::cout << "\tlw t1, (sp)\n";
+    else {
+      std::cout << "\tli t6, " << stack_offset[load.src] << std::endl;
+      std::cout << "\tadd t6, t6, sp\n";
+      std::cout << "\tlw t1, (t6)\n";
+    }
+    std::cout << "\tlw t2, (t1)\n";
+    std::cout << "\tli t6, " << st_id << std::endl;
+    std::cout << "\tadd t6, t6, sp\n";
+    std::cout << "\tsw t2, (t6)\n";
+    st_id += 4;
+    return st_id - 4;
+  }
   return stack_offset[load.src];
 }
 
 // 访问 global alloc 指令
 void Visit(const koopa_raw_global_alloc_t &global_alloc) {
   if(global_alloc.init->kind.tag == KOOPA_RVT_ZERO_INIT)
-    std::cout << "\t.zero 4\n";
+    std::cout << "\t.zero " << calc_size(global_alloc.init->ty) << std::endl;
   else if(global_alloc.init->kind.tag == KOOPA_RVT_INTEGER)
     std::cout << "\t.word " << global_alloc.init->kind.data.integer.value << std::endl;
+  else if(global_alloc.init->kind.tag == KOOPA_RVT_AGGREGATE)
+    Visit(global_alloc.init->kind.data.aggregate);
   else {
     std::cerr << "Error: Unknown global allocation type.\n";
     assert(false);
+  }
+}
+
+// 访问 aggregate, 获取初始化数据
+void Visit(const koopa_raw_aggregate_t &aggregate) {
+  for(size_t i = 0; i < aggregate.elems.len; ++i) {
+    koopa_raw_value_t ptr = reinterpret_cast<koopa_raw_value_t>(aggregate.elems.buffer[i]);
+    if(ptr->kind.tag == KOOPA_RVT_INTEGER)
+      std::cout << "\t.word " << ptr->kind.data.integer.value << std::endl;
+    else
+      Visit(ptr->kind.data.aggregate);
   }
 }
 
@@ -463,6 +509,119 @@ void Visit(const koopa_raw_call_t &call, int st_offset) {
   std::cout << "\tcall " << call.callee->name + 1 << std::endl;
 }
 
+// 访问 get_elem_ptr 指令
+void Visit(const koopa_raw_get_elem_ptr_t &get_elem_ptr, int &st_id) {
+  size_t off_size;
+  if(get_elem_ptr.src->ty->data.pointer.base->tag == KOOPA_RTT_INT32)
+    off_size = calc_size(get_elem_ptr.src->ty->data.pointer.base);
+  else
+    off_size = calc_size(get_elem_ptr.src->ty->data.pointer.base) / (get_elem_ptr.src->ty->data.pointer.base->data.array.len);
+  if(get_elem_ptr.src->kind.tag == KOOPA_RVT_GLOBAL_ALLOC)
+    std::cout << "\tla t6, " << get_elem_ptr.src->name + 1 << std::endl;
+  else if(get_elem_ptr.src->kind.tag == KOOPA_RVT_ALLOC) {
+    std::cout << "\tli t6, " << stack_offset[get_elem_ptr.src] << std::endl;
+    std::cout << "\tadd t6, t6, sp\n";
+  }
+  else {
+    std::cout << "\tli t5, " << stack_offset[get_elem_ptr.src] << std::endl;
+    std::cout << "\tadd t5, t5, sp\n";
+    std::cout << "\tlw t6, (t5)\n";
+  }
+
+  if(get_elem_ptr.index->kind.tag == KOOPA_RVT_INTEGER) {
+    if(get_elem_ptr.index->kind.data.integer.value == 0) {
+      std::cout << "\tli t1, " << st_id << std::endl;
+      std::cout << "\tadd t1, t1, sp\n";
+      std::cout << "\tsw t6, (t1)\n";
+      return;
+    }
+    else
+      std::cout << "\tli t1, " << get_elem_ptr.index->kind.data.integer.value << std::endl;
+  }
+  else {
+    std::cout << "\tli t5, " << stack_offset[get_elem_ptr.index] << std::endl;
+    std::cout << "\tadd t5, t5, sp\n";
+    std::cout << "\tlw t1, (t5)\n";
+  }
+  std::cout << "\tli t2, " << off_size << std::endl;
+  std::cout << "\tmul t1, t1, t2\n";
+  std::cout << "\tadd t6, t6, t1\n";
+  std::cout << "\tli t1, " << st_id << std::endl;
+  std::cout << "\tadd t1, t1, sp\n";
+  std::cout << "\tsw t6, (t1)\n";
+}
+
+// 访问 get_ptr 指令
+void Visit(const koopa_raw_get_ptr_t &get_ptr, int &st_id) {
+  size_t off_size = 0;
+  if(get_ptr.src->ty->data.pointer.base->tag == KOOPA_RTT_INT32)
+    off_size = calc_size(get_ptr.src->ty->data.pointer.base);
+  else
+    off_size = calc_size(get_ptr.src->ty->data.pointer.base);
+
+  if(get_ptr.src->kind.tag == KOOPA_RVT_GLOBAL_ALLOC)
+    std::cout << "\tla t6, " << get_ptr.src->name + 1 << std::endl;
+  else if(get_ptr.src->kind.tag == KOOPA_RVT_ALLOC) {
+    std::cout << "\tli t6, " << stack_offset[get_ptr.src] << std::endl;
+    std::cout << "\tadd t6, t6, sp\n";
+  }
+  else {
+    std::cout << "\tli t5, " << stack_offset[get_ptr.src] << std::endl;
+    std::cout << "\tadd t5, t5, sp\n";
+    std::cout << "\tlw t6, (t5)\n";
+  }
+
+  if(get_ptr.index->kind.tag == KOOPA_RVT_INTEGER) {
+    if(get_ptr.index->kind.data.integer.value == 0) {
+      std::cout << "\tli t1, " << st_id << std::endl;
+      std::cout << "\tadd t1, t1, sp\n";
+      std::cout << "\tsw t6, (t1)\n";
+      return;
+    }
+    else
+      std::cout << "\tli t1, " << get_ptr.index->kind.data.integer.value << std::endl;
+  }
+  else {
+    std::cout << "\tli t5, " << stack_offset[get_ptr.index] << std::endl;
+    std::cout << "\tadd t5, t5, sp\n";
+    std::cout << "\tlw t1, (t5)\n";
+  }
+  std::cout << "\tli t2, " << off_size << std::endl;
+  std::cout << "\tmul t1, t1, t2\n";
+  std::cout << "\tadd t6, t6, t1\n";
+  std::cout << "\tli t1, " << st_id << std::endl;
+  std::cout << "\tadd t1, t1, sp\n";
+  std::cout << "\tsw t6, (t1)\n";
+}
+
+// 访问 alloc 指令
+void Visit(const koopa_raw_value_t &value, int &st_id) {
+  koopa_raw_type_kind_t *base;
+  int arr_size;
+  switch(value->ty->data.pointer.base->tag) {
+    case KOOPA_RTT_INT32:
+      stack_offset[value] = st_id;
+      st_id += 4;
+      break;
+    case KOOPA_RTT_ARRAY:
+      base = (koopa_raw_type_kind_t *)(value->ty->data.pointer.base);
+      arr_size = 4;
+      while(base->tag != KOOPA_RTT_INT32) {
+        arr_size *= base->data.array.len;
+        base = (koopa_raw_type_kind_t *)(base->data.array.base);
+      }
+      stack_offset[value] = st_id;
+      st_id += arr_size;
+      break;
+    case KOOPA_RTT_POINTER:
+      stack_offset[value] = st_id;
+      st_id += 4;
+      break;
+    default:
+      assert(false);
+  }
+}
+
 // 访问 raw slice, 获取存在返回值的指令个数
 int get_S_num(const koopa_raw_slice_t &slice) {
   int S_num = 0;
@@ -489,8 +648,23 @@ int get_S_num(const koopa_raw_slice_t &slice) {
 // 访问指令，若该指令存在返回值，则返回 1, 否则返回 0
 int get_S_num(const koopa_raw_value_t &value) {
   const auto &ty = value->ty;
+  koopa_raw_type_kind_t *base;
+  int arr_size;
   if(ty->tag == KOOPA_RTT_UNIT)
     return 0;
+  if(ty->tag == KOOPA_RTT_POINTER) {
+    if(ty->data.pointer.base->tag == KOOPA_RTT_ARRAY) {
+        base = (koopa_raw_type_kind_t *)(ty->data.pointer.base);
+        arr_size = 4;
+        while(base->tag != KOOPA_RTT_INT32) {
+          arr_size *= base->data.array.len;
+          base = (koopa_raw_type_kind_t *)(base->data.array.base);
+        }
+        return arr_size / 4;
+    }
+    else
+      return 1;
+  }
   return 1;
 }
 
@@ -519,4 +693,11 @@ int get_RA_num(const koopa_raw_value_t &value, bool &RA_call) {
     return 0;
   RA_call = true;
   return (int32_t)value->kind.data.call.args.len - 8;
+}
+
+// 计算 zeroinit 的数据大小
+size_t calc_size(const koopa_raw_type_t &ty) {
+  if(ty->tag == KOOPA_RTT_INT32)
+    return 4;
+  return (ty->data.array.len) * calc_size(ty->data.array.base);
 }
