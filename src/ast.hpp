@@ -8,32 +8,68 @@
 #include <unordered_map>
 #include "symbol.hpp"
 
+/** Variable number */
 static int ast_i = 0;
+/** Block number */
 static int block_id = 0;
+/** Logical op number */
 static int logical_id = 0;
+/** While label number */
 static int while_id = 0;
+/** Function entry number */
 static int entry_id = 0;
+/** True if ret exists inside a block */
 static bool block_ret = false;
+/** True if jump exists inside a block */
 static bool block_jump = false;
+/** True if it's a parameter reference */
 static bool is_param_r = false;
+/** True if current pointed array's size equal to whole size */
 static bool is_all_layer = false;
+/** Symbol field */
 static symbol_field field = symbol_field::Field_Global;
+/** Vector of `while_id` as an iterative struct */
 static std::vector<int> while_id_vec;
+/** Current local symbol table */
 extern symbol_table_list_elem_t *curr_symbol_table;
+/** Global symbol table */
 extern std::unordered_map<std::string, symbol_t> global_symbol_table;
 
-// Base of all AST
+/**
+ * BaseAST is the base of all AST class.
+*/
 class BaseAST {
   public:
+    /**
+     * @brief Destroy the BaseAST object.
+    */
     virtual ~BaseAST() = default;
+    /**
+     * @brief Dump AST-specific Koopa IR
+    */
     virtual std::string DumpIR() const = 0;
+    /**
+     * @brief Calculate const value of an expression.
+    */
     virtual int ConstCalc() const = 0;
+    /**
+     * @brief Return `ident` of an AST node.
+    */
     virtual std::string getIdent() const = 0;
+    /**
+     * @brief Return the process of getting value's pointer.
+    */
     virtual std::string getPointer() const = 0;
+    /**
+     * @brief Return array initial value whose blank is filled with 0.
+     * @param dim_vec Vector of dimension value.
+    */
     virtual std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const = 0;
 };
 
-// CompUnitRoot
+/**
+ * CompUnitRootAST is the root node of AST.
+*/
 class CompUnitRootAST : public BaseAST {
   public:
     std::unique_ptr<BaseAST> compunit;
@@ -63,7 +99,7 @@ class CompUnitRootAST : public BaseAST {
     }
 };
 
-// CompUnit Auxiliary data
+/** CompUnit Type Info */
 enum CompUnitType {
     CompUnit_SinFunc,
     CompUnit_MulFunc,
@@ -71,7 +107,9 @@ enum CompUnitType {
     CompUnit_MulDecl
 };
 
-// CompUnit
+/** 
+ * CompUnitAST represents non-terminal CompUnit.
+*/
 class CompUnitAST : public BaseAST {
   public:
     CompUnitType type;
@@ -128,13 +166,17 @@ class CompUnitAST : public BaseAST {
     }
 };
 
-// FuncDef Auxiliary data
+/**
+ * FuncDef Type Info.
+*/
 enum FuncDefType {
     FuncDef_Noparam,
     FuncDef_Param
 };
 
-// FuncDef
+/**
+ * FuncDefAST represents non-terminal FuncDef.
+*/
 class FuncDefAST : public BaseAST {
   public:
     FuncDefType type;
@@ -145,19 +187,11 @@ class FuncDefAST : public BaseAST {
 
     std::string DumpIR() const override {
         std::string str;
-        // std::string func_ident;
-        // symbol_table_list_elem_t *target_symbol_table;
         global_symbol_table[ident] = symbol_t{func_type->ConstCalc(), symbol_tag::Symbol_Func};
         field = symbol_field::Field_Local;
         if(type == FuncDef_Noparam) {
-            str += "fun @";
-            str += ident;
-            str += "()";
-            str += func_type->DumpIR();
-            str += "{\n";
-            str += "\%entry_";
-            str += std::to_string(entry_id++);
-            str += ":\n";
+            str += "fun @" + ident + "()" + func_type->DumpIR() + "{\n"
+                 + "\%entry_" + std::to_string(entry_id++) + ":\n";
             block_ret = false;
             block_jump = false;
             str += block->DumpIR();
@@ -166,22 +200,15 @@ class FuncDefAST : public BaseAST {
             str += "}\n";
         }
         else {
-            str += "fun @";
-            str += ident;
-            str += "(";
+            str += "fun @" + ident + "(";
             create_symbol_table();
             size_t vec_size = funcfparamvec->size();
             for(int i = vec_size - 1; i > 0; i--) {
                 str += (*funcfparamvec)[i]->getIdent();
                 str += ", ";
             }
-            str += (*funcfparamvec)[0]->getIdent();
-            str += ")";
-            str += func_type->DumpIR();
-            str += " {\n";
-            str += "\%entry_";
-            str += std::to_string(entry_id++);
-            str += ":\n";
+            str += (*funcfparamvec)[0]->getIdent() + ")" + func_type->DumpIR() + "{\n"
+                 + "\%entry_" + std::to_string(entry_id++) + ":\n";
             block_ret = false;
             block_jump = false;
             for(int i = vec_size - 1; i >= 0; i--)
@@ -214,13 +241,17 @@ class FuncDefAST : public BaseAST {
     }
 };
 
-// FuncType Auxiliary data
+/**
+ * FuncType Type Info.
+*/
 enum FuncTypeType {
     FuncType_INT,
     FuncType_VOID
 };
 
-// FuncType
+/**
+ * FuncTypeAST represents non-terminal FuncType.
+*/
 class FuncTypeAST : public BaseAST {
   public:
     FuncTypeType type;
@@ -252,14 +283,18 @@ class FuncTypeAST : public BaseAST {
     }
 };
 
-// FuncFParam Auxiliary data
+/**
+ * FuncFParam Type Info.
+*/
 enum FuncFParamType {
     FuncFParam_Int,
     FuncFParam_Arr_Sin,
     FuncFParam_Arr_Mul
 };
 
-// FuncFParam
+/**
+ * FuncFParamAST represents non-terminal FuncFParam.
+*/
 class FuncFParamAST : public BaseAST {
   public:
     FuncFParamType type;
@@ -276,34 +311,16 @@ class FuncFParamAST : public BaseAST {
         std::string dim_str;
         switch(type) {
             case FuncFParam_Int:
-                str += "\t@";
-                str += ident;
-                str += "_";
-                str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
-                str += " = alloc i32\n";
-                str += "\tstore @";
-                str += param_ident;
-                str += ", @";
-                str += ident;
-                str += "_";
-                str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
-                str += "\n";
+                str += "\t@" + ident + "_" + std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num)
+                     + " = alloc i32\n\tstore @" + param_ident + ", @" + ident + "_"
+                     + std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num) + "\n";
                 (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
                     symbol_t{-1, symbol_tag::Symbol_Var};
                 break;
             case FuncFParam_Arr_Sin:
-                str += "\t@";
-                str += ident;
-                str += "_";
-                str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
-                str += " = alloc *i32\n";
-                str += "\tstore @";
-                str += param_ident;
-                str += ", @";
-                str += ident;
-                str += "_";
-                str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
-                str += "\n";
+                str += "\t@" + ident + "_" + std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num)
+                     + " = alloc *i32\n\tstore @" + param_ident + ", @" + ident + "_"
+                     + std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num) + "\n";
                 (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
                     symbol_t{1, symbol_tag::Symbol_Pointer};
                 break;
@@ -313,23 +330,13 @@ class FuncFParamAST : public BaseAST {
                     int dim = (*constexpvec)[i]->ConstCalc();
                     dim_vec.push_back(dim);
                 }
-                str += "\t@";
-                str += ident;
-                str += "_";
-                str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
-                str += " = alloc *";
+                str += "\t@" + ident + "_" + std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num)
+                     + " = alloc *";
                 dim_str += ("[i32, " + std::to_string(dim_vec[0]) + "]");
                 for(int i = 1; i < dim_vec.size(); ++i) 
                     dim_str = "[" + dim_str + ", " + std::to_string(dim_vec[i]) + "]";
-                str += dim_str;
-                str += "\n";
-                str += "\tstore @";
-                str += param_ident;
-                str += ", @";
-                str += ident;
-                str += "_";
-                str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
-                str += "\n";
+                str += dim_str + "\n" + "\tstore @" + param_ident + ", @" + ident + "_"
+                     + std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num) + "\n";
                 (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
                     symbol_t{(int)(dim_vec.size()) + 1, symbol_tag::Symbol_Pointer};
                 break;
@@ -350,18 +357,12 @@ class FuncFParamAST : public BaseAST {
         std::string dim_str;
         switch(type) {
             case FuncFParam_Int:
-                str += "@param_";
-                str += ident;
-                str += "_";
-                str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
-                str += ": i32";
+                str += "@param_" + ident + "_" + std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num)
+                     + ": i32";
                 break;
             case FuncFParam_Arr_Sin:
-                str += "@param_";
-                str += ident;
-                str += "_";
-                str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
-                str += ": *i32";
+                str += "@param_" + ident + "_" + std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num)
+                     + ": *i32";
                 break;
             case FuncFParam_Arr_Mul:
                 vec_size = (*constexpvec).size();
@@ -369,11 +370,8 @@ class FuncFParamAST : public BaseAST {
                     int dim = (*constexpvec)[i]->ConstCalc();
                     dim_vec.push_back(dim);
                 }
-                str += "@param_";
-                str += ident;
-                str += "_";
-                str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
-                str += ": *";
+                str += "@param_" + ident + "_" + std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num)
+                     + ": *";
                 dim_str += ("[i32, " + std::to_string(dim_vec[0]) + "]");
                 for(int i = 1; i < dim_vec.size(); ++i) 
                     dim_str = "[" + dim_str + ", " + std::to_string(dim_vec[i]) + "]";
@@ -395,13 +393,17 @@ class FuncFParamAST : public BaseAST {
     }
 };
 
-// Block Auxiliary data
+/**
+ * Block Type Info.
+*/
 enum BlockType {
     Block_Items,
     Block_Null
 };
 
-// Block
+/**
+ * BlockAST represents non-terminal Block.
+*/
 class BlockAST : public BaseAST {
   public:
     BlockType type;
@@ -437,13 +439,17 @@ class BlockAST : public BaseAST {
     }
 };
 
-// Stmt Auxiliary data
+/**
+ * Stmt Type Info.
+*/
 enum StmtType {
     Stmt_Open,
     Stmt_Closed
 };
 
-// Stmt
+/**
+ * StmtAST represents non-terminal Stmt.
+*/
 class StmtAST : public BaseAST {
   public:
     StmtType type;
@@ -473,14 +479,18 @@ class StmtAST : public BaseAST {
     }
 };
 
-// OpenStmt Auxiliary data
+/**
+ * OpenStmt Type Info.
+*/
 enum OpenStmtType {
     Open_If,
     Open_Else,
     Open_While
 };
 
-// OpenStmt
+/**
+ * OpenStmtAST represents non-terminal OpenStmt.
+*/
 class OpenStmtAST : public BaseAST {
   public:
     OpenStmtType type;
@@ -500,28 +510,15 @@ class OpenStmtAST : public BaseAST {
             case Open_If:
                 then_id = block_id++;
                 end_id = block_id++;
-                str += exp->DumpIR();
-                str += "\tbr \%";
-                str += std::to_string(ast_i - 1);
-                str += ", \%block_";
-                str += std::to_string(then_id);
-                str += ", \%block_";
-                str += std::to_string(end_id);
-                str += "\n";
-                str += "\%block_";
-                str += std::to_string(then_id);
-                str += ":\n";
+                str += exp->DumpIR() + "\tbr \%" + std::to_string(ast_i - 1) + ", \%block_"
+                     + std::to_string(then_id) + ", \%block_" + std::to_string(end_id) + "\n"
+                     + "\%block_" + std::to_string(then_id) + ":\n";
                 block_ret = false;
                 block_jump = false;
                 str += stmt->DumpIR();
-                if(!block_ret && !block_jump) {
-                    str += "\tjump \%block_";
-                    str += std::to_string(end_id);
-                    str += "\n";
-                }
-                str += "\%block_";
-                str += std::to_string(end_id);
-                str += ":\n";
+                if(!block_ret && !block_jump)
+                    str += "\tjump \%block_" + std::to_string(end_id) + "\n";
+                str += "\%block_" + std::to_string(end_id) + ":\n";
                 block_ret = false;
                 block_jump = false;
                 break;
@@ -529,42 +526,24 @@ class OpenStmtAST : public BaseAST {
                 then_id = block_id++;
                 else_id = block_id++;
                 end_id = block_id++;
-                str += exp->DumpIR();
-                str += "\tbr \%";
-                str += std::to_string(ast_i - 1);
-                str += ", \%block_";
-                str += std::to_string(then_id);
-                str += ", \%block_";
-                str += std::to_string(else_id);
-                str += "\n";
-                str += "\%block_";
-                str += std::to_string(then_id);
-                str += ":\n";
+                str += exp->DumpIR() + "\tbr \%" + std::to_string(ast_i - 1) + ", \%block_"
+                     + std::to_string(then_id) + ", \%block_" + std::to_string(else_id)
+                     + "\n\%block_" + std::to_string(then_id) + ":\n";
                 block_ret = false;
                 block_jump = false;
                 str += stmt->DumpIR();
                 then_ret = block_ret;
-                if(!block_ret && !block_jump) {
-                    str += "\tjump \%block_";
-                    str += std::to_string(end_id);
-                    str += "\n";
-                }
-                str += "\%block_";
-                str += std::to_string(else_id);
-                str += ":\n";
+                if(!block_ret && !block_jump)
+                    str += "\tjump \%block_" + std::to_string(end_id) + "\n";
+                str += "\%block_" + std::to_string(else_id) + ":\n";
                 block_ret = false;
                 block_jump = false;
                 str += openstmt->DumpIR();
                 else_ret = block_ret;
-                if(!block_ret && !block_jump) {
-                    str += "\tjump \%block_";
-                    str += std::to_string(end_id);
-                    str += "\n";
-                }
+                if(!block_ret && !block_jump) 
+                    str += "\tjump \%block_" + std::to_string(end_id) + "\n";
                 if(!then_ret || !else_ret){
-                    str += "\%block_";
-                    str += std::to_string(end_id);
-                    str += ":\n";
+                    str += "\%block_" + std::to_string(end_id) + ":\n";
                     block_ret = false;
                 }
                 break;
@@ -572,37 +551,20 @@ class OpenStmtAST : public BaseAST {
                 while_id_vec.push_back(while_id);
                 while_block_id = while_id;
                 while_id++;
-                str += "\tjump \%while_entry_";
-                str += std::to_string(while_block_id);
-                str += "\n";
-                str += "\%while_entry_";
-                str += std::to_string(while_block_id);
-                str += ":\n";
+                str += "\tjump \%while_entry_" + std::to_string(while_block_id) + "\n\%while_entry_"
+                     + std::to_string(while_block_id) + ":\n";
                 block_ret = false;
                 block_jump = false;
-                str += exp->DumpIR();
-                str += "\tbr \%";
-                str += std::to_string(ast_i - 1);
-                str += ", \%while_body_";
-                str += std::to_string(while_block_id);
-                str += ", \%while_end_";
-                str += std::to_string(while_block_id);
-                str += "\n";
-                str += "\%while_body_";
-                str += std::to_string(while_block_id);
-                str += ":\n";
+                str += exp->DumpIR() + "\tbr \%" + std::to_string(ast_i - 1) + ", \%while_body_"
+                     + std::to_string(while_block_id) + ", \%while_end_" + std::to_string(while_block_id)
+                     + "\n\%while_body_" + std::to_string(while_block_id) + ":\n";
                 block_ret = false;
                 block_jump = false;
                 str += openstmt->DumpIR();
-                if(!block_ret && !block_jump){
-                    str += "\tjump \%while_entry_";
-                    str += std::to_string(while_block_id);
-                    str += "\n";
-                }
+                if(!block_ret && !block_jump)
+                    str += "\tjump \%while_entry_" + std::to_string(while_block_id) + "\n";
                 while_id_vec.pop_back();
-                str += "\%while_end_";
-                str += std::to_string(while_block_id);
-                str += ":\n";
+                str += "\%while_end_" + std::to_string(while_block_id) + ":\n";
                 block_ret = false;
                 block_jump = false;
                 break;
@@ -630,14 +592,18 @@ class OpenStmtAST : public BaseAST {
     }
 };
 
-// ClosedStmt Auxiliary data
+/**
+ * ClosedStmt Type Info.
+*/
 enum ClosedStmtType {
     Closed_NonIf,
     Closed_If,
     Closed_While
 };
 
-// ClosedStmt
+/**
+ * ClosedStmtAST represents non-terminal ClosedStmt.
+*/
 class ClosedStmtAST : public BaseAST {
   public:
     ClosedStmtType type;
@@ -661,42 +627,23 @@ class ClosedStmtAST : public BaseAST {
                 then_id = block_id++;
                 else_id = block_id++;
                 end_id = block_id++;
-                str += exp->DumpIR();
-                str += "\tbr \%";
-                str += std::to_string(ast_i - 1);
-                str += ", \%block_";
-                str += std::to_string(then_id);
-                str += ", \%block_";
-                str += std::to_string(else_id);
-                str += "\n";
-                str += "\%block_";
-                str += std::to_string(then_id);
-                str += ":\n";
+                str += exp->DumpIR() + "\tbr \%" + std::to_string(ast_i - 1) + ", \%block_" + std::to_string(then_id)
+                     + ", \%block_" + std::to_string(else_id) + "\n\%block_" + std::to_string(then_id) + ":\n";
                 block_ret = false;
                 block_jump = false;
                 str += stmt->DumpIR();
                 then_ret = block_ret;
-                if(!block_ret && !block_jump) {
-                    str += "\tjump \%block_";
-                    str += std::to_string(end_id);
-                    str += "\n";   
-                }
-                str += "\%block_";
-                str += std::to_string(else_id);
-                str += ":\n";
+                if(!block_ret && !block_jump) 
+                    str += "\tjump \%block_" + std::to_string(end_id) + "\n";
+                str += "\%block_" + std::to_string(else_id) + ":\n";
                 block_ret = false;
                 block_jump = false;
                 str += closedstmt->DumpIR();
                 else_ret = block_ret;
-                if(!block_ret && !block_jump) {
-                    str += "\tjump \%block_";
-                    str += std::to_string(end_id);
-                    str += "\n"; 
-                }
+                if(!block_ret && !block_jump)
+                    str += "\tjump \%block_" + std::to_string(end_id) + "\n";
                 if(!then_ret || !else_ret){
-                    str += "\%block_";
-                    str += std::to_string(end_id);
-                    str += ":\n";
+                    str += "\%block_" + std::to_string(end_id) + ":\n";
                     block_ret = false;
                     block_jump = false;
                 }
@@ -705,37 +652,19 @@ class ClosedStmtAST : public BaseAST {
                 while_id_vec.push_back(while_id);
                 while_block_id = while_id;
                 while_id++;
-                str += "\tjump \%while_entry_";
-                str += std::to_string(while_block_id);
-                str += "\n";
-                str += "\%while_entry_";
-                str += std::to_string(while_block_id);
-                str += ":\n";
+                str += "\tjump \%while_entry_" + std::to_string(while_block_id) + "\n\%while_entry_"
+                     + std::to_string(while_block_id) + ":\n";
                 block_ret = false;
                 block_jump = false;
-                str += exp->DumpIR();
-                str += "\tbr \%";
-                str += std::to_string(ast_i - 1);
-                str += ", \%while_body_";
-                str += std::to_string(while_block_id);
-                str += ", \%while_end_";
-                str += std::to_string(while_block_id);
-                str += "\n";
-                str += "\%while_body_";
-                str += std::to_string(while_block_id);
-                str += ":\n";
+                str += exp->DumpIR() + "\tbr \%" + std::to_string(ast_i - 1) + ", \%while_body_" + std::to_string(while_block_id)
+                     + ", \%while_end_" + std::to_string(while_block_id) + "\n\%while_body_" + std::to_string(while_block_id) + ":\n";
                 block_ret = false;
                 block_jump = false;
                 str += stmt->DumpIR();
-                if(!block_ret && !block_jump){
-                    str += "\tjump \%while_entry_";
-                    str += std::to_string(while_block_id);
-                    str += "\n";
-                }
+                if(!block_ret && !block_jump)
+                    str += "\tjump \%while_entry_" + std::to_string(while_block_id) + "\n";
                 while_id_vec.pop_back();
-                str += "\%while_end_";
-                str += std::to_string(while_block_id);
-                str += ":\n";
+                str += "\%while_end_" + std::to_string(while_block_id) + ":\n";
                 block_ret = false;
                 block_jump = false;
                 break;
@@ -763,7 +692,9 @@ class ClosedStmtAST : public BaseAST {
     }
 };
 
-// NonIfStmt Auxiliary data
+/**
+ * NonIfStmt Type Info.
+*/
 enum NonIfStmtType {
     NonIf_Ret,
     NonIf_Lval,
@@ -777,7 +708,9 @@ enum NonIfStmtType {
     NonIf_Continue
 };
 
-// NonIfStmt
+/**
+ * NonIfStmtAST represents non-terminal NonIfStmt.
+*/
 class NonIfStmtAST : public BaseAST {
   public:
     NonIfStmtType type;
@@ -793,11 +726,7 @@ class NonIfStmtAST : public BaseAST {
         int store_src;
         switch(type) {
             case NonIf_Ret:
-                str += exp->DumpIR();
-                str += "\tret ";
-                str += "\%";
-                str += std::to_string(ast_i - 1);
-                str += "\n";
+                str += exp->DumpIR() + "\tret \%" + std::to_string(ast_i - 1) + "\n";
                 block_ret = true;
                 break;
             case NonIf_Lval:
@@ -807,8 +736,7 @@ class NonIfStmtAST : public BaseAST {
                 target_symbol_table = search_symbol_table(ident);   
                 if(target_symbol_table != nullptr) {
                     tag = (*(target_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident].tag;
-                    ident += "_";
-                    ident += std::to_string(target_symbol_table->symbol_table_ptr->symbol_table_num);
+                    ident += "_" + std::to_string(target_symbol_table->symbol_table_ptr->symbol_table_num);
                 }
                 else if(global_symbol_table.find(ident) != global_symbol_table.end())
                     tag = global_symbol_table[ident].tag;
@@ -819,27 +747,15 @@ class NonIfStmtAST : public BaseAST {
                 switch(tag) {
                     case Symbol_Const:
                     case Symbol_Var:
-                        str += "\tstore \%";
-                        str += std::to_string(ast_i - 1);
-                        str += ", @";
-                        str += ident;
-                        str += "\n";
+                        str += "\tstore \%" + std::to_string(ast_i - 1) + ", @" + ident + "\n";
                         break;
                     case Symbol_Arr:
-                        str += lval->getPointer();
-                        str += "\tstore \%";
-                        str += std::to_string(store_src);
-                        str += ", \%";
-                        str += std::to_string(ast_i - 1);
-                        str += "\n";
+                        str += lval->getPointer() + "\tstore \%" + std::to_string(store_src) + ", \%"
+                             + std::to_string(ast_i - 1) + "\n";
                         break;
                     case Symbol_Pointer:
-                        str += lval->getPointer();
-                        str += "\tstore \%";
-                        str += std::to_string(store_src);
-                        str += ", \%";
-                        str += std::to_string(ast_i - 1);
-                        str += "\n";
+                        str += lval->getPointer() + "\tstore \%" + std::to_string(store_src) + ", \%"
+                             + std::to_string(ast_i - 1) + "\n";
                         break;
                     default:
                         assert(false);
@@ -862,9 +778,7 @@ class NonIfStmtAST : public BaseAST {
                     break;
                 while_block_id = while_id_vec[while_id_vec.size() - 1];
                 if(!block_ret && !block_jump){
-                    str += "\tjump \%while_end_";
-                    str += std::to_string(while_block_id);
-                    str += "\n";
+                    str += "\tjump \%while_end_" + std::to_string(while_block_id) + "\n";
                     block_jump = true;
                 }
                 break;
@@ -873,9 +787,7 @@ class NonIfStmtAST : public BaseAST {
                     break;
                 while_block_id = while_id_vec[while_id_vec.size() - 1];
                 if(!block_ret && !block_jump){
-                    str += "\tjump \%while_entry_";
-                    str += std::to_string(while_block_id);
-                    str += "\n";
+                    str += "\tjump \%while_entry_" + std::to_string(while_block_id) + "\n";
                     block_jump = true;
                 }
                 break;
@@ -903,7 +815,9 @@ class NonIfStmtAST : public BaseAST {
     }
 };
 
-// Exp
+/**
+ * ExpAST represents non-terminal Exp.
+*/
 class ExpAST : public BaseAST {
   public:
     std::unique_ptr<BaseAST> lorexp;
@@ -932,14 +846,18 @@ class ExpAST : public BaseAST {
     }
 };
 
-// Primary Auxiliary Data
+/**
+ * Primary Type Info.
+*/
 enum PrimaryType {
     Primary_Exp,
     Primary_Number,
     Primary_Lval
 };
 
-// PrimaryExp
+/**
+ * PrimaryExpAST represents non-terminal PrimaryExp.
+*/
 class PrimaryExpAST : public BaseAST {
   public:
     PrimaryType type;
@@ -954,11 +872,7 @@ class PrimaryExpAST : public BaseAST {
                 str = exp->DumpIR();
                 break;
             case Primary_Number:
-                str += "\t\%";
-                str += std::to_string(ast_i);
-                str += " = add 0, ";
-                str += std::to_string(number);
-                str += "\n";
+                str += "\t\%" + std::to_string(ast_i) + " = add 0, " + std::to_string(number) + "\n";
                 ast_i++;
                 break;
             case Primary_Lval:
@@ -1000,7 +914,9 @@ class PrimaryExpAST : public BaseAST {
     }
 };
 
-// Unary Auxiliary Data
+/**
+ * Unary Type Info.
+*/
 enum UnaryType {
     Unary_PrimaryExp,
     Unary_UnaryExp,
@@ -1008,7 +924,9 @@ enum UnaryType {
     Unary_Param
 };
 
-// UnaryExp
+/**
+ * UnaryExpAST represents non-terminal UnaryExp.
+*/
 class UnaryExpAST : public BaseAST {
   public:
     UnaryType type;
@@ -1028,35 +946,19 @@ class UnaryExpAST : public BaseAST {
             case Unary_UnaryExp:
                 str = exp->DumpIR();
                 if(unaryop == '-'){
-                    str += "\t\%";
-                    str += std::to_string(ast_i);
-                    str += " = sub 0, \%";
-                    str += std::to_string(ast_i - 1);
-                    str += "\n";
+                    str += "\t\%" + std::to_string(ast_i) + " = sub 0, \%" + std::to_string(ast_i - 1) + "\n";
                     ast_i++;
                 }
                 else if(unaryop == '!'){
-                    str += "\t\%";
-                    str += std::to_string(ast_i);
-                    str += " = eq \%";
-                    str += std::to_string(ast_i - 1);
-                    str += ", 0\n";
+                    str += "\t\%" + std::to_string(ast_i) + " = eq \%" + std::to_string(ast_i - 1) + ", 0\n";
                     ast_i++;
                 }
                 break;
             case Unary_NoParam:
-                if(global_symbol_table[ident].value == FuncTypeType::FuncType_VOID) {
-                    str += "\tcall @";
-                    str += ident;
-                    str += "()\n";
-                }
-                else {
-                    str += "\t\%";
-                    str += std::to_string(ast_i++);
-                    str += " = call @";
-                    str += ident;
-                    str += "()\n";
-                }
+                if(global_symbol_table[ident].value == FuncTypeType::FuncType_VOID)
+                    str += "\tcall @" + ident + "()\n";
+                else
+                    str += "\t\%" + std::to_string(ast_i++) + " = call @" + ident + "()\n";
                 break;
             case Unary_Param:
                 vec_size = funcrparamvec->size();
@@ -1069,33 +971,19 @@ class UnaryExpAST : public BaseAST {
                 is_param_r = false;
                 param_ast_i.push_back(ast_i - 1);
                 if(global_symbol_table[ident].value == FuncTypeType::FuncType_VOID) {
-                    str += "\tcall @";
-                    str += ident;
-                    str += "(";
+                    str += "\tcall @" + ident + "(\%";
                     size_t param_vec_size = param_ast_i.size();
-                    str += "\%";
                     str += std::to_string(param_ast_i[0]);
-                    for(int i = 1; i < param_vec_size; ++i) {
-                        str += ", ";
-                        str += "\%";
-                        str += std::to_string(param_ast_i[i]);
-                    }
+                    for(int i = 1; i < param_vec_size; ++i)
+                        str += ", \%" + std::to_string(param_ast_i[i]);
                     str += ")\n";
                 }
                 else {
-                    str += "\t\%";
-                    str += std::to_string(ast_i++);
-                    str += " = call @";
-                    str += ident;
-                    str += "(";
+                    str += "\t\%" + std::to_string(ast_i++) + " = call @" + ident + "(\%";
                     size_t param_vec_size = param_ast_i.size();
-                    str += "\%";
                     str += std::to_string(param_ast_i[0]);
-                    for(int i = 1; i < param_vec_size; ++i) {
-                        str += ", ";
-                        str += "\%";
-                        str += std::to_string(param_ast_i[i]);
-                    }
+                    for(int i = 1; i < param_vec_size; ++i)
+                        str += ", \%" + std::to_string(param_ast_i[i]);
                     str += ")\n";
                 }
                 break;
@@ -1137,7 +1025,9 @@ class UnaryExpAST : public BaseAST {
     }
 };
 
-// MulExp Auxiliary data
+/**
+ * Mul Type Info.
+*/
 enum MulType {
     Mul_UnaryExp,
     Mul_MulExp,
@@ -1145,7 +1035,9 @@ enum MulType {
     Mul_ModExp
 };
 
-// MulExp
+/**
+ * MulExpAST represents non-terminal MulExp.
+*/
 class MulExpAST : public BaseAST {
   public:
     MulType type;
@@ -1162,40 +1054,22 @@ class MulExpAST : public BaseAST {
             case Mul_MulExp:
                 str = unaryexp->DumpIR();
                 r_num = std::to_string(ast_i - 1);
-                str += mulexp->DumpIR();
-                str += "\t\%";
-                str += std::to_string(ast_i);
-                str += " = mul \%";
-                str += std::to_string(ast_i - 1);
-                str += ", \%";
-                str += r_num;
-                str += "\n";
+                str += mulexp->DumpIR() + "\t\%" + std::to_string(ast_i) + " = mul \%" + std::to_string(ast_i - 1)
+                     + ", \%" + r_num + "\n";
                 ast_i++;
                 break;
             case Mul_DivExp:
                 str = unaryexp->DumpIR();
                 r_num = std::to_string(ast_i - 1);
-                str += mulexp->DumpIR();
-                str += "\t\%";
-                str += std::to_string(ast_i);
-                str += " = div \%";
-                str += std::to_string(ast_i - 1);
-                str += ", \%";
-                str += r_num;
-                str += "\n";
+                str += mulexp->DumpIR() + "\t\%" + std::to_string(ast_i) + " = div \%" + std::to_string(ast_i - 1)
+                     + ", \%" + r_num + "\n";
                 ast_i++;
                 break;
             case Mul_ModExp:
                 str = unaryexp->DumpIR();
                 r_num = std::to_string(ast_i - 1);
-                str += mulexp->DumpIR();
-                str += "\t\%";
-                str += std::to_string(ast_i);
-                str += " = mod \%";
-                str += std::to_string(ast_i - 1);
-                str += ", \%";
-                str += r_num;
-                str += "\n";
+                str += mulexp->DumpIR() + "\t\%" + std::to_string(ast_i) + " = mod \%" + std::to_string(ast_i - 1)
+                     + ", \%" + r_num + "\n";
                 ast_i++;
                 break;
             default:
@@ -1237,14 +1111,18 @@ class MulExpAST : public BaseAST {
     }
 };
 
-// AddExp Auxiliary data
+/**
+ * Add Type Info.
+*/
 enum AddType {
     Add_MulExp,
     Add_AddExp,
     Add_MinusExp
 };
 
-// AddExp
+/**
+ * AddExpAST represents non-terminal AddExp.
+*/
 class AddExpAST : public BaseAST {
   public:
     AddType type;
@@ -1261,27 +1139,15 @@ class AddExpAST : public BaseAST {
             case Add_AddExp:
                 str = mulexp->DumpIR();
                 r_num = std::to_string(ast_i - 1);
-                str += addexp->DumpIR();
-                str += "\t\%";
-                str += std::to_string(ast_i);
-                str += " = add \%";
-                str += std::to_string(ast_i - 1);
-                str += ", \%";
-                str += r_num;
-                str += "\n";
+                str += addexp->DumpIR() + "\t\%" + std::to_string(ast_i) + " = add \%" + std::to_string(ast_i - 1)
+                     + ", \%" + r_num + "\n";
                 ast_i++;
                 break;
             case Add_MinusExp:
                 str = mulexp->DumpIR();
                 r_num = std::to_string(ast_i - 1);
-                str += addexp->DumpIR();
-                str += "\t\%";
-                str += std::to_string(ast_i);
-                str += " = sub \%";
-                str += std::to_string(ast_i - 1);
-                str += ", \%";
-                str += r_num;
-                str += "\n";
+                str += addexp->DumpIR() + "\t\%" + std::to_string(ast_i) + " = sub \%" + std::to_string(ast_i - 1)
+                     + ", \%" + r_num + "\n";
                 ast_i++;
                 break;
             default:
@@ -1320,7 +1186,9 @@ class AddExpAST : public BaseAST {
     }
 };
 
-// RelExp Auxiliary data
+/**
+ * RelExp Type Info.
+*/
 enum RelType {
     Rel_AddExp,
     Rel_LTExp,
@@ -1329,7 +1197,9 @@ enum RelType {
     Rel_GEExp
 };
 
-// RelExp
+/**
+ * RelExpAST represents non-terminal RelExp.
+*/
 class RelExpAST : public BaseAST {
   public:
     RelType type;
@@ -1346,53 +1216,29 @@ class RelExpAST : public BaseAST {
             case Rel_LTExp:
                 str = addexp->DumpIR();
                 r_num = std::to_string(ast_i - 1);
-                str += relexp->DumpIR();
-                str += "\t\%";
-                str += std::to_string(ast_i);
-                str += " = lt \%";
-                str += std::to_string(ast_i - 1);
-                str += ", \%";
-                str += r_num;
-                str += "\n";
+                str += relexp->DumpIR() + "\t\%" + std::to_string(ast_i) + " = lt \%" + std::to_string(ast_i - 1)
+                     + ", \%" + r_num + "\n";
                 ast_i++;
                 break;
             case Rel_GTExp:
                 str = addexp->DumpIR();
                 r_num = std::to_string(ast_i - 1);
-                str += relexp->DumpIR();
-                str += "\t\%";
-                str += std::to_string(ast_i);
-                str += " = gt \%";
-                str += std::to_string(ast_i - 1);
-                str += ", \%";
-                str += r_num;
-                str += "\n";
+                str += relexp->DumpIR() + "\t\%" + std::to_string(ast_i) + " = gt \%" + std::to_string(ast_i - 1)
+                     + ", \%" + r_num + "\n";
                 ast_i++;
                 break;
             case Rel_LEExp:
                 str = addexp->DumpIR();
                 r_num = std::to_string(ast_i - 1);
-                str += relexp->DumpIR();
-                str += "\t\%";
-                str += std::to_string(ast_i);
-                str += " = le \%";
-                str += std::to_string(ast_i - 1);
-                str += ", \%";
-                str += r_num;
-                str += "\n";
+                str += relexp->DumpIR() + "\t\%" + std::to_string(ast_i) + " = le \%" + std::to_string(ast_i - 1)
+                     + ", \%" + r_num + "\n";
                 ast_i++;
                 break;
             case Rel_GEExp:
                 str = addexp->DumpIR();
                 r_num = std::to_string(ast_i - 1);
-                str += relexp->DumpIR();
-                str += "\t\%";
-                str += std::to_string(ast_i);
-                str += " = ge \%";
-                str += std::to_string(ast_i - 1);
-                str += ", \%";
-                str += r_num;
-                str += "\n";
+                str += relexp->DumpIR() + "\t\%" + std::to_string(ast_i) + " = ge \%" + std::to_string(ast_i - 1)
+                     + ", \%" + r_num + "\n";
                 ast_i++;
                 break;
             default:
@@ -1437,14 +1283,18 @@ class RelExpAST : public BaseAST {
     }
 };
 
-// EqExp Auxiliary data
+/**
+ * EqExp Type Info.
+*/
 enum EqType {
     Eq_RelExp,
     Eq_EQExp,
     Eq_NEQExp
 };
 
-// EqExp
+/**
+ * EqExpAST represents non-terminal EqExp.
+*/
 class EqExpAST : public BaseAST {
   public:
     EqType type;
@@ -1461,27 +1311,15 @@ class EqExpAST : public BaseAST {
             case Eq_EQExp:
                 str = relexp->DumpIR();
                 r_num = std::to_string(ast_i - 1);
-                str += eqexp->DumpIR();
-                str += "\t\%";
-                str += std::to_string(ast_i);
-                str += " = eq \%";
-                str += std::to_string(ast_i - 1);
-                str += ", \%";
-                str += r_num;
-                str += "\n";
+                str += eqexp->DumpIR() + "\t\%" + std::to_string(ast_i) + " = eq \%" + std::to_string(ast_i - 1)
+                     + ", \%" + r_num + "\n";
                 ast_i++;
                 break;
             case Eq_NEQExp:
                 str = relexp->DumpIR();
                 r_num = std::to_string(ast_i - 1);
-                str += eqexp->DumpIR();
-                str += "\t\%";
-                str += std::to_string(ast_i);
-                str += " = ne \%";
-                str += std::to_string(ast_i - 1);
-                str += ", \%";
-                str += r_num;
-                str += "\n";
+                str += eqexp->DumpIR() + "\t\%" + std::to_string(ast_i) + " = ne \%" + std::to_string(ast_i - 1)
+                     + ", \%" + r_num + "\n";
                 ast_i++;
                 break;
             default:
@@ -1520,13 +1358,17 @@ class EqExpAST : public BaseAST {
     }
 };
 
-// LAndExp Auxiliary data
+/**
+ * LAndExp Type Info.
+*/
 enum LAndType {
     LAnd_EqExp,
     LAnd_ANDExp
 };
 
-// LAndExp
+/**
+ * LAndExpAST represents non-terminal LAndExp.
+*/
 class LAndExpAST : public BaseAST {
   public:
     LAndType type;
@@ -1543,54 +1385,17 @@ class LAndExpAST : public BaseAST {
                 break;
             case LAnd_ANDExp:
                 logic_id = logical_id++;
-                str += "\t@result_";
-                str += std::to_string(logic_id);
-                str += " = alloc i32\n";
-                str += landexp->DumpIR();
-                str += "\t\%";
-                str += std::to_string(ast_i);
-                str += " = ne \%";
-                str += std::to_string(ast_i - 1);
-                str += ", 0\n";
+                str += "\t@result_" + std::to_string(logic_id) + " = alloc i32\n" + landexp->DumpIR() + "\t\%"
+                     + std::to_string(ast_i) + " = ne \%" + std::to_string(ast_i - 1) + ", 0\n";
                 ast_i++;
-                str += "\tstore \%";
-                str += std::to_string(ast_i - 1);
-                str += ", @result_";
-                str += std::to_string(logic_id);
-                str += "\n";
-                str += "\tbr \%";
-                str += std::to_string(ast_i - 1);
-                str += ", \%then_";
-                str += std::to_string(logic_id);
-                str += ", \%end_";
-                str += std::to_string(logic_id);
-                str += "\n";
-                str += "\%then_";
-                str += std::to_string(logic_id);
-                str += ":\n";
-                str += eqexp->DumpIR();
-                str += "\t\%";
-                str += std::to_string(ast_i);
-                str += " = ne \%";
-                str += std::to_string(ast_i - 1);
-                str += ", 0\n";
+                str += "\tstore \%" + std::to_string(ast_i - 1) + ", @result_" + std::to_string(logic_id) + "\n\tbr \%"
+                     + std::to_string(ast_i - 1) + ", \%then_" + std::to_string(logic_id) + ", \%end_" + std::to_string(logic_id)
+                     + "\n\%then_" + std::to_string(logic_id) + ":\n" + eqexp->DumpIR() + "\t\%" + std::to_string(ast_i)
+                     + " = ne \%" + std::to_string(ast_i - 1) + ", 0\n";
                 ast_i++;
-                str += "\tstore \%";
-                str += std::to_string(ast_i - 1);
-                str += ", @result_";
-                str += std::to_string(logic_id);
-                str += "\n";
-                str += "\tjump \%end_";
-                str += std::to_string(logic_id);
-                str += "\n";
-                str += "\%end_";
-                str += std::to_string(logic_id);
-                str += ":\n";
-                str += "\t\%";
-                str += std::to_string(ast_i);
-                str += " = load @result_";
-                str += std::to_string(logic_id);
-                str += "\n";
+                str += "\tstore \%" + std::to_string(ast_i - 1) + ", @result_" + std::to_string(logic_id) + "\n\tjump \%end_"
+                     + std::to_string(logic_id) + "\n\%end_" + std::to_string(logic_id) + ":\n\t\%" + std::to_string(ast_i)
+                     + " = load @result_" + std::to_string(logic_id) + "\n";
                 ast_i++;
                 break;
             default:
@@ -1619,13 +1424,17 @@ class LAndExpAST : public BaseAST {
     }
 };
 
-// LOrExp Auxiliary data
+/**
+ * LOrExp Type Info.
+*/
 enum LOrType {
     LOr_LAndExp,
     LOr_ORExp
 };
 
-// LOrExp
+/**
+ * LOrExpAST represents non-terminal LOrExp.
+*/
 class LOrExpAST : public BaseAST {
   public:
     LOrType type;
@@ -1642,54 +1451,17 @@ class LOrExpAST : public BaseAST {
                 break;
             case LOr_ORExp:
                 logic_id = logical_id++;
-                str += "\t@result_";
-                str += std::to_string(logic_id);
-                str += " = alloc i32\n";
-                str += lorexp->DumpIR();
-                str += "\t\%";
-                str += std::to_string(ast_i);
-                str += " = ne \%";
-                str += std::to_string(ast_i - 1);
-                str += ", 0\n";
+                str += "\t@result_" + std::to_string(logic_id) + " = alloc i32\n" + lorexp->DumpIR() + "\t\%"
+                     + std::to_string(ast_i) + " = ne \%" + std::to_string(ast_i - 1) + ", 0\n";
                 ast_i++;
-                str += "\tstore \%";
-                str += std::to_string(ast_i - 1);
-                str += ", @result_";
-                str += std::to_string(logic_id);
-                str += "\n";
-                str += "\tbr \%";
-                str += std::to_string(ast_i - 1);
-                str += ", \%end_";
-                str += std::to_string(logic_id);
-                str += ", \%then_";
-                str += std::to_string(logic_id);
-                str += "\n";
-                str += "\%then_";
-                str += std::to_string(logic_id);
-                str += ":\n";
-                str += landexp->DumpIR();
-                str += "\t\%";
-                str += std::to_string(ast_i);
-                str += " = ne \%";
-                str += std::to_string(ast_i - 1);
-                str += ", 0\n";
+                str += "\tstore \%" + std::to_string(ast_i - 1) + ", @result_" + std::to_string(logic_id) + "\n\tbr \%"
+                     + std::to_string(ast_i - 1) + ", \%end_" + std::to_string(logic_id) + ", \%then_" + std::to_string(logic_id)
+                     + "\n\%then_" + std::to_string(logic_id) + ":\n" + landexp->DumpIR() + "\t\%" + std::to_string(ast_i)
+                     + " = ne \%" + std::to_string(ast_i - 1) + ", 0\n";
                 ast_i++;
-                str += "\tstore \%";
-                str += std::to_string(ast_i - 1);
-                str += ", @result_";
-                str += std::to_string(logic_id);
-                str += "\n";
-                str += "\tjump \%end_";
-                str += std::to_string(logic_id);
-                str += "\n";
-                str += "\%end_";
-                str += std::to_string(logic_id);
-                str += ":\n";
-                str += "\t\%";
-                str += std::to_string(ast_i);
-                str += " = load @result_";
-                str += std::to_string(logic_id);
-                str += "\n";
+                str += "\tstore \%" + std::to_string(ast_i - 1) + ", @result_" + std::to_string(logic_id) + "\n\tjump \%end_"
+                     + std::to_string(logic_id) + "\n\%end_" + std::to_string(logic_id) + ":\n\t\%" + std::to_string(ast_i)
+                     + " = load @result_" + std::to_string(logic_id) + "\n";
                 ast_i++;
                 break;
             default:
@@ -1718,13 +1490,17 @@ class LOrExpAST : public BaseAST {
     }
 };
 
-// Decl Auxiliary data
+/**
+ * Decl Type Info.
+*/
 enum DeclType {
     Decl_Const,
     Decl_Var
 };
 
-// Decl
+/**
+ * DeclAST represents non-terminal Decl.
+*/
 class DeclAST : public BaseAST {
   public:
     DeclType type;
@@ -1754,7 +1530,9 @@ class DeclAST : public BaseAST {
     }
 };
 
-// ConstDecl
+/**
+ * ConstDeclAST represents non-terminal ConstDecl.
+*/
 class ConstDeclAST : public BaseAST {
   public:
     std::unique_ptr<BaseAST> btype;
@@ -1786,7 +1564,9 @@ class ConstDeclAST : public BaseAST {
     }
 };
 
-// BType
+/**
+ * BTypeAST represents non-terminal BType.
+*/
 class BTypeAST : public BaseAST {
   public:
     std::string int_type;
@@ -1814,13 +1594,17 @@ class BTypeAST : public BaseAST {
     }
 };
 
-// ConstDef Auxiliary data
+/**
+ * ConstDef Type Info.
+*/
 enum ConstDefType {
     ConstDef_Int,
     ConstDef_Arr
 };
 
-// ConstDef
+/**
+ * ConstDefAST represents non-terminal ConstDef.
+*/
 class ConstDefAST : public BaseAST {
   public:
     ConstDefType type;
@@ -1854,17 +1638,12 @@ class ConstDefAST : public BaseAST {
                 if(field == symbol_field::Field_Local) {
                     (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
                         symbol_t{(int)(dim_vec.size()), symbol_tag::Symbol_Arr};
-                    str += "\t@";
-                    str += ident;
-                    str += "_";
-                    str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
-                    str += " = alloc ";
+                    str += "\t@" + ident + "_" + std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num) + " = alloc ";
                     std::string dim_str;
                     dim_str += ("[i32, " + std::to_string(dim_vec[0]) + "]");
                     for(int i = 1; i < dim_vec.size(); ++i) 
                         dim_str = "[" + dim_str + ", " + std::to_string(dim_vec[i]) + "]";
-                    str += dim_str;
-                    str += "\n";
+                    str += dim_str + "\n";
                     for(int i = 0; i < arr_len; ++i) {
                         std::vector<int> arr_index;
                         int index = i;
@@ -1877,43 +1656,25 @@ class ConstDefAST : public BaseAST {
                         }
                         arr_index.push_back(index);
                         int arr_index_size = arr_index.size();
-                        str += "\t\%";
-                        str += std::to_string(ast_i++);
-                        str += " = getelemptr @";
-                        str += ident;
-                        str += "_";
-                        str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
-                        str += ", ";
-                        str += std::to_string(arr_index[0]);
-                        str += "\n";
+                        str += "\t\%" + std::to_string(ast_i++) + " = getelemptr @" + ident + "_"
+                             + std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num) + ", "
+                             + std::to_string(arr_index[0]) + "\n";
                         for(int j = 1; j < arr_index_size; ++j) {
-                            str += "\t\%";
-                            str += std::to_string(ast_i);
-                            str += " = getelemptr \%";
-                            str += std::to_string(ast_i - 1);
-                            str += ", ";
-                            str += std::to_string(arr_index[j]);
-                            str += "\n";
+                            str += "\t\%" + std::to_string(ast_i) + " = getelemptr \%" + std::to_string(ast_i - 1)
+                                 + ", " + std::to_string(arr_index[j]) + "\n";
                             ast_i++;
                         }
-                        str += "\tstore ";
-                        str += std::to_string((*arr_init)[i]);
-                        str += ", \%";
-                        str += std::to_string(ast_i - 1);
-                        str += "\n";
+                        str += "\tstore " + std::to_string((*arr_init)[i]) + ", \%" + std::to_string(ast_i - 1) + "\n";
                     }
                 }
                 else {
                     global_symbol_table[ident] = symbol_t{(int)dim_vec.size(), symbol_tag::Symbol_Arr};
-                    str += "global @";
-                    str += ident;
-                    str += " = alloc ";
+                    str += "global @" + ident + " = alloc ";
                     std::string dim_str;
                     dim_str += ("[i32, " + std::to_string(dim_vec[0]) + "]");
                     for(int i = 1; i < dim_vec.size(); ++i) 
                         dim_str = "[" + dim_str + ", " + std::to_string(dim_vec[i]) + "]";
-                    str += dim_str;
-                    str += ", ";
+                    str += dim_str + ", ";
                     std::vector<std::string> init_str_vec;
                     std::vector<std::string> compress_init_str_vec;
                     for(int i : (*arr_init)) init_str_vec.push_back(std::to_string(i));
@@ -1923,20 +1684,16 @@ class ConstDefAST : public BaseAST {
                         int index = 0;
                         while(index < init_str_vec_size) {
                             std::string init_str_set;
-                            init_str_set += "{";
-                            init_str_set += init_str_vec[index];
-                            for(int j = 1; j < dim_vec[i]; ++j) {
-                                init_str_set += ", ";
-                                init_str_set += init_str_vec[index + j];
-                            }
+                            init_str_set += "{" + init_str_vec[index];
+                            for(int j = 1; j < dim_vec[i]; ++j)
+                                init_str_set += ", " + init_str_vec[index + j];
                             init_str_set += "}";
                             index += dim_vec[i];
                             compress_init_str_vec.push_back(init_str_set);
                         }
                         init_str_vec = compress_init_str_vec;
                     }
-                    str += init_str_vec[0];
-                    str += "\n";
+                    str += init_str_vec[0] + "\n";
                 }
                 break;
             default:
@@ -1963,14 +1720,18 @@ class ConstDefAST : public BaseAST {
     }
 };
 
-// ConstInitVal Auxiliary data
+/**
+ * ConstInitVal Type Info.
+*/
 enum ConstInitValType {
     ConstInitVal_Exp,
     ConstInitVal_Null,
     ConstInitVal_Vec
 };
 
-// ConstInitVal
+/**
+ * ConstInitValAST represents non-terminal ConstInitVal.
+*/
 class ConstInitValAST : public BaseAST {
   public:
     ConstInitValType type;
@@ -2049,13 +1810,17 @@ class ConstInitValAST : public BaseAST {
     }
 };
 
-// BlockItem Auxiliary data
+/**
+ * BlockItem Type Info.
+*/
 enum BlockItemType {
     BlockItem_Decl,
     BlockItem_Stmt
 };
 
-// BlockItem
+/**
+ * BlockItemAST represents non-terminal BlockItem.
+*/
 class BlockItemAST : public BaseAST {
   public:
     BlockItemType type;
@@ -2097,13 +1862,17 @@ class BlockItemAST : public BaseAST {
     }
 };
 
-// LVal Auxiliary data
+/**
+ * Lval Type Info.
+*/
 enum LValType {
     LVal_Int,
     LVal_Arr
 };
 
-// LVal
+/**
+ * LValAST represents non-terminal LVal.
+*/
 class LValAST : public BaseAST {
   public:
     LValType type;
@@ -2118,39 +1887,15 @@ class LValAST : public BaseAST {
             if(target_symbol_table == nullptr) {
                 if(global_symbol_table.find(ident) != global_symbol_table.end()) {
                     symbol = global_symbol_table[ident];
-                    if(symbol.tag == 
-                        symbol_tag::Symbol_Const) {
-                        str += "\t\%";
-                        str += std::to_string(ast_i);
-                        str += " = add 0, ";
-                        str += std::to_string(symbol.value);
-                        str += "\n";
-                        ast_i++;
-                    }
-                    else if(symbol.tag == symbol_tag::Symbol_Var) {
-                        str += "\t\%";
-                        str += std::to_string(ast_i);
-                        str += " = load @";
-                        str += ident;
-                        str += "\n";
-                        ast_i++;
-                    }
-                    else if(symbol.tag == symbol_tag::Symbol_Arr) {
-                        str += "\t\%";
-                        str += std::to_string(ast_i);
-                        str += " = getelemptr @";
-                        str += ident;
-                        str += ", 0\n";
-                        ast_i++;
-                    }
-                    else {
-                        str += "\t\%";
-                        str += std::to_string(ast_i);
-                        str += " = load @";
-                        str += ident;
-                        str += "\n";
-                        ast_i++;
-                    }
+                    if(symbol.tag == symbol_tag::Symbol_Const)
+                        str += "\t\%" + std::to_string(ast_i) + " = add 0, " + std::to_string(symbol.value) + "\n";
+                    else if(symbol.tag == symbol_tag::Symbol_Var)
+                        str += "\t\%" + std::to_string(ast_i) + " = load @" + ident + "\n";
+                    else if(symbol.tag == symbol_tag::Symbol_Arr)
+                        str += "\t\%" + std::to_string(ast_i) + " = getelemptr @" + ident + ", 0\n";
+                    else
+                        str += "\t\%" + std::to_string(ast_i) + " = load @" + ident + "\n";
+                    ast_i++;
                 }
                 else {
                     std::cerr << "Error: Can't find ident." << std::endl;
@@ -2160,67 +1905,26 @@ class LValAST : public BaseAST {
             else {
                 symbol = (*(target_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident];
                 int symbol_num = target_symbol_table->symbol_table_ptr->symbol_table_num;
-                if(symbol.tag == 
-                    symbol_tag::Symbol_Const) {
-                    str += "\t\%";
-                    str += std::to_string(ast_i);
-                    str += " = add 0, ";
-                    str += std::to_string(symbol.value);
-                    str += "\n";
-                    ast_i++;
-                }
-                else if(symbol.tag == symbol_tag::Symbol_Var) {
-                    str += "\t\%";
-                    str += std::to_string(ast_i);
-                    str += " = load @";
-                    str += ident;
-                    str += "_";
-                    str += std::to_string(symbol_num);
-                    str += "\n";
-                    ast_i++;
-                }
-                else if(symbol.tag == symbol_tag::Symbol_Arr) {
-                    str += "\t\%";
-                    str += std::to_string(ast_i);
-                    str += " = getelemptr @";
-                    str += ident;
-                    str += "_";
-                    str += std::to_string(symbol_num);
-                    str += ", 0\n";
-                    ast_i++;
-                }
-                else {
-                    str += "\t\%";
-                    str += std::to_string(ast_i);
-                    str += " = load @";
-                    str += ident;
-                    str += "_";
-                    str += std::to_string(symbol_num);
-                    str += "\n";
-                    ast_i++;
-                }
+                if(symbol.tag == symbol_tag::Symbol_Const)
+                    str += "\t\%" + std::to_string(ast_i) + " = add 0, " + std::to_string(symbol.value) + "\n";
+                else if(symbol.tag == symbol_tag::Symbol_Var)
+                    str += "\t\%" + std::to_string(ast_i) + " = load @" + ident + "_" + std::to_string(symbol_num) + "\n";
+                else if(symbol.tag == symbol_tag::Symbol_Arr)
+                    str += "\t\%" + std::to_string(ast_i) + " = getelemptr @" + ident + "_" + std::to_string(symbol_num) + ", 0\n";
+                else
+                    str += "\t\%" + std::to_string(ast_i) + " = load @" + ident + "_" + std::to_string(symbol_num) + "\n";
+                ast_i++;
             }
         }
         else {
             if(target_symbol_table == nullptr) {
                 if(global_symbol_table.find(ident) != global_symbol_table.end()) {
                     str += getPointer();
-                    if(is_param_r && !is_all_layer) {
-                        str += "\t\%";
-                        str += std::to_string(ast_i);
-                        str += " = getelemptr \%";
-                        str += std::to_string(ast_i - 1);
-                        str += ", 0\n";
-                        ast_i++;
-                    }
-                    else {
-                        str += "\t\%";
-                        str += std::to_string(ast_i);
-                        str += " = load \%";
-                        str += std::to_string(ast_i - 1);
-                        str += "\n";
-                        ast_i++;
-                    }
+                    if(is_param_r && !is_all_layer)
+                        str += "\t\%" + std::to_string(ast_i) + " = getelemptr \%" + std::to_string(ast_i - 1) + ", 0\n";
+                    else
+                        str += "\t\%" + std::to_string(ast_i) + " = load \%" + std::to_string(ast_i - 1) + "\n";
+                    ast_i++;
                 }
                 else {
                     std::cerr << "Error: Can't find ident." << std::endl;
@@ -2229,22 +1933,11 @@ class LValAST : public BaseAST {
             }
             else {
                 str += getPointer();
-                if(is_param_r && !is_all_layer) {
-                    str += "\t\%";
-                    str += std::to_string(ast_i);
-                    str += " = getelemptr \%";
-                    str += std::to_string(ast_i - 1);
-                    str += ", 0\n";
-                    ast_i++;
-                }
-                else {
-                    str += "\t\%";
-                    str += std::to_string(ast_i);
-                    str += " = load \%";
-                    str += std::to_string(ast_i - 1);
-                    str += "\n";
-                    ast_i++;
-                }
+                if(is_param_r && !is_all_layer)
+                    str += "\t\%" + std::to_string(ast_i) + " = getelemptr \%" + std::to_string(ast_i - 1) + ", 0\n";
+                else
+                    str += "\t\%" + std::to_string(ast_i) + " = load \%" + std::to_string(ast_i - 1) + "\n";
+                ast_i++;
             }
         }
         return str;
@@ -2281,47 +1974,22 @@ class LValAST : public BaseAST {
                 else
                     is_all_layer = false;
                 if(tag == Symbol_Arr){
-                    str += "\t\%";
-                    str += std::to_string(ast_i);
-                    str += " = getelemptr @";
-                    str += ident;
-                    str += ", \%";
-                    str += std::to_string(index_vec[0]);
-                    str += "\n";
+                    str += "\t\%" + std::to_string(ast_i) + " = getelemptr @" + ident + ", \%" + std::to_string(index_vec[0]) + "\n";
                     ast_i++;
                     for(int i = 1; i < index_vec_size; ++i) {
-                        str += "\t\%";
-                        str += std::to_string(ast_i);
-                        str += " = getelemptr \%";
-                        str += std::to_string(ast_i - 1);
-                        str += ", \%";
-                        str += std::to_string(index_vec[i]);
-                        str += "\n";
+                        str += "\t\%" + std::to_string(ast_i) + " = getelemptr \%" + std::to_string(ast_i - 1) + ", \%"
+                             + std::to_string(index_vec[i]) + "\n";
                         ast_i++;
                     }
                 }
                 else if(tag == Symbol_Pointer) {
-                    str += "\t\%";
-                    str += std::to_string(ast_i++);
-                    str += " = load @";
-                    str += ident;
-                    str += "\n";
-                    str += "\t\%";
-                    str += std::to_string(ast_i);
-                    str += " = getptr \%";
-                    str += std::to_string(ast_i - 1);
-                    str += ", \%";
-                    str += std::to_string(index_vec[0]);
-                    str += "\n";
+                    str += "\t\%" + std::to_string(ast_i++);
+                    str += " = load @" + ident + "\n\t\%" + std::to_string(ast_i)
+                         + " = getptr \%" + std::to_string(ast_i - 1) + ", \%" + std::to_string(index_vec[0]) + "\n";
                     ast_i++;
                     for(int i = 1; i < index_vec_size; ++i) {
-                        str += "\t\%";
-                        str += std::to_string(ast_i);
-                        str += " = getelemptr \%";
-                        str += std::to_string(ast_i - 1);
-                        str += ", \%";
-                        str += std::to_string(index_vec[i]);
-                        str += "\n";
+                        str += "\t\%" + std::to_string(ast_i) + " = getelemptr \%" + std::to_string(ast_i - 1) + ", \%"
+                             + std::to_string(index_vec[i]) + "\n";
                         ast_i++;
                     }
                 }
@@ -2346,51 +2014,24 @@ class LValAST : public BaseAST {
             else
                 is_all_layer = false;
             if(tag == Symbol_Arr) {
-                str += "\t\%";
-                str += std::to_string(ast_i);
-                str += " = getelemptr @";
-                str += ident;
-                str += "_";
-                str += std::to_string(symbol_num);
-                str += ", \%";
-                str += std::to_string(index_vec[0]);
-                str += "\n";
+                str += "\t\%" + std::to_string(ast_i) + " = getelemptr @" + ident + "_" + std::to_string(symbol_num)
+                     + ", \%" + std::to_string(index_vec[0]) + "\n";
                 ast_i++;
                 for(int i = 1; i < index_vec_size; ++i) {
-                    str += "\t\%";
-                    str += std::to_string(ast_i);
-                    str += " = getelemptr \%";
-                    str += std::to_string(ast_i - 1);
-                    str += ", \%";
-                    str += std::to_string(index_vec[i]);
-                    str += "\n";
+                    str += "\t\%" + std::to_string(ast_i) + " = getelemptr \%" + std::to_string(ast_i - 1)
+                         + ", \%" + std::to_string(index_vec[i]) + "\n";
                     ast_i++;
                 }
             }
             else if(tag == Symbol_Pointer) {
-                str += "\t\%";
-                str += std::to_string(ast_i++);
-                str += " = load @";
-                str += ident;
-                str += "_";
-                str += std::to_string(symbol_num);
-                str += "\n";
-                str += "\t\%";
-                str += std::to_string(ast_i);
-                str += " = getptr \%";
-                str += std::to_string(ast_i - 1);
-                str += ", \%";
-                str += std::to_string(index_vec[0]);
-                str += "\n";
+                str += "\t\%" + std::to_string(ast_i++);
+                str += " = load @" + ident + "_" + std::to_string(symbol_num)
+                     + "\n\t\%" + std::to_string(ast_i) + " = getptr \%" + std::to_string(ast_i - 1) + ", \%"
+                     + std::to_string(index_vec[0]) + "\n";
                 ast_i++;
                 for(int i = 1; i < index_vec_size; ++i) {
-                    str += "\t\%";
-                    str += std::to_string(ast_i);
-                    str += " = getelemptr \%";
-                    str += std::to_string(ast_i - 1);
-                    str += ", \%";
-                    str += std::to_string(index_vec[i]);
-                    str += "\n";
+                    str += "\t\%" + std::to_string(ast_i) + " = getelemptr \%" + std::to_string(ast_i - 1) + ", \%"
+                         + std::to_string(index_vec[i]) + "\n";
                     ast_i++;
                 }
             }
@@ -2404,7 +2045,9 @@ class LValAST : public BaseAST {
     }
 };
 
-// ConstExp
+/**
+ * ConstExpAST represents non-terminal ConstExp.
+*/
 class ConstExpAST : public BaseAST {
   public:
     std::unique_ptr<BaseAST> exp;
@@ -2432,7 +2075,9 @@ class ConstExpAST : public BaseAST {
     }
 };
 
-// VarDecl
+/**
+ * VarDeclAST represents non-terminal VarDecl.
+*/
 class VarDeclAST : public BaseAST {
   public:
     std::unique_ptr<BaseAST> functype;
@@ -2464,7 +2109,9 @@ class VarDeclAST : public BaseAST {
     }
 };
 
-// VarDef Auxiliary data
+/**
+ * VarDef Type Info.
+*/
 enum VarDefType {
     VarDef_Int_NO_Init,
     VarDef_Int_Init,
@@ -2472,7 +2119,9 @@ enum VarDefType {
     VarDef_Arr_Init
 };
 
-// VarDef
+/**
+ * VarDefAST represents non-terminal VarDef.
+*/
 class VarDefAST : public BaseAST {
   public:
     VarDefType type;
@@ -2485,32 +2134,19 @@ class VarDefAST : public BaseAST {
         std::unique_ptr<std::vector<int> > arr_init;
         if(type == VarDef_Int_Init || type == VarDef_Int_NO_Init) {
             if(field == symbol_field::Field_Local) {
-                str += "\t@";
-                str += ident;
-                str += "_";
-                str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
-                str += " = alloc i32\n";
-                if(type == VarDef_Int_Init) {
-                    str += initval->DumpIR();
-                    str += "\tstore \%";
-                    str += std::to_string(ast_i - 1);
-                    str += ", @";
-                    str += ident;
-                    str += "_";
-                    str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
-                    str += "\n";
-                }
+                str += "\t@" + ident + "_" + std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num)
+                     + " = alloc i32\n";
+                if(type == VarDef_Int_Init)
+                    str += initval->DumpIR() + "\tstore \%" + std::to_string(ast_i - 1) + ", @" + ident + "_"
+                         + std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num) + "\n";
                 (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
                     symbol_t{-1, symbol_tag::Symbol_Var};
             }
             else {
-                str += "global @";
-                str += ident;
-                str += " = alloc i32, ";
+                str += "global @" + ident + " = alloc i32, ";
                 if(type == VarDef_Int_Init) {
                     int val = initval->ConstCalc();
-                    str += std::to_string(val);
-                    str += "\n";
+                    str += std::to_string(val) + "\n";
                     global_symbol_table[ident] = symbol_t{val, symbol_tag::Symbol_Var};
                 }
                 else {
@@ -2532,17 +2168,13 @@ class VarDefAST : public BaseAST {
             if(field == symbol_field::Field_Local) {
                 (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
                     symbol_t{(int)(dim_vec.size()), symbol_tag::Symbol_Arr};
-                str += "\t@";
-                str += ident;
-                str += "_";
-                str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
-                str += " = alloc ";
+                str += "\t@" + ident + "_" + std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num)
+                     + " = alloc ";
                 std::string dim_str;
                 dim_str += ("[i32, " + std::to_string(dim_vec[0]) + "]");
                 for(int i = 1; i < dim_vec.size(); ++i) 
                     dim_str = "[" + dim_str + ", " + std::to_string(dim_vec[i]) + "]";
-                str += dim_str;
-                str += "\n";
+                str += dim_str + "\n";
                 for(int i = 0; i < arr_len; ++i) {
                     std::vector<int> arr_index;
                     int index = i;
@@ -2555,43 +2187,25 @@ class VarDefAST : public BaseAST {
                     }
                     arr_index.push_back(index);
                     int arr_index_size = arr_index.size();
-                    str += "\t\%";
-                    str += std::to_string(ast_i++);
-                    str += " = getelemptr @";
-                    str += ident;
-                    str += "_";
-                    str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
-                    str += ", ";
-                    str += std::to_string(arr_index[0]);
-                    str += "\n";
+                    str += "\t\%" + std::to_string(ast_i++);
+                    str += " = getelemptr @" + ident + "_" + std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num)
+                         + ", " + std::to_string(arr_index[0]) + "\n";
                     for(int j = 1; j < arr_index_size; ++j) {
-                        str += "\t\%";
-                        str += std::to_string(ast_i);
-                        str += " = getelemptr \%";
-                        str += std::to_string(ast_i - 1);
-                        str += ", ";
-                        str += std::to_string(arr_index[j]);
-                        str += "\n";
+                        str += "\t\%" + std::to_string(ast_i) + " = getelemptr \%" + std::to_string(ast_i - 1) + ", "
+                             + std::to_string(arr_index[j]) + "\n";
                         ast_i++;
                     }
-                    str += "\tstore ";
-                    str += std::to_string((*arr_init)[i]);
-                    str += ", \%";
-                    str += std::to_string(ast_i - 1);
-                    str += "\n";
+                    str += "\tstore " + std::to_string((*arr_init)[i]) + ", \%" + std::to_string(ast_i - 1) + "\n";
                 }
             }
             else {
                 global_symbol_table[ident] = symbol_t{(int)(dim_vec.size()), symbol_tag::Symbol_Arr};
-                str += "global @";
-                str += ident;
-                str += " = alloc ";
+                str += "global @" + ident + " = alloc ";
                 std::string dim_str;
                 dim_str += ("[i32, " + std::to_string(dim_vec[0]) + "]");
                 for(int i = 1; i < dim_vec.size(); ++i) 
                     dim_str = "[" + dim_str + ", " + std::to_string(dim_vec[i]) + "]";
-                str += dim_str;
-                str += ", ";
+                str += dim_str + ", ";
                 std::vector<std::string> init_str_vec;
                 std::vector<std::string> compress_init_str_vec;
                 for(int i : (*arr_init)) init_str_vec.push_back(std::to_string(i));
@@ -2601,20 +2215,16 @@ class VarDefAST : public BaseAST {
                     int index = 0;
                     while(index < init_str_vec_size) {
                         std::string init_str_set;
-                        init_str_set += "{";
-                        init_str_set += init_str_vec[index];
-                        for(int j = 1; j < dim_vec[i]; ++j) {
-                            init_str_set += ", ";
-                            init_str_set += init_str_vec[index + j];
-                        }
+                        init_str_set += "{" + init_str_vec[index];
+                        for(int j = 1; j < dim_vec[i]; ++j)
+                            init_str_set += ", " + init_str_vec[index + j];
                         init_str_set += "}";
                         index += dim_vec[i];
                         compress_init_str_vec.push_back(init_str_set);
                     }
                     init_str_vec = compress_init_str_vec;
                 }
-                str += init_str_vec[0];
-                str += "\n";
+                str += init_str_vec[0] + "\n";
             }
         }
         else {
@@ -2627,29 +2237,22 @@ class VarDefAST : public BaseAST {
             if(field == symbol_field::Field_Local) {
                 (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
                     symbol_t{(int)(dim_vec.size()), symbol_tag::Symbol_Arr};
-                str += "\t@";
-                str += ident;
-                str += "_";
-                str += std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num);
-                str += " = alloc ";
+                str += "\t@" + ident + "_" + std::to_string(curr_symbol_table->symbol_table_ptr->symbol_table_num)
+                     + " = alloc ";
                 std::string dim_str;
                 dim_str += ("[i32, " + std::to_string(dim_vec[0]) + "]");
                 for(int i = 1; i < dim_vec.size(); ++i) 
                     dim_str = "[" + dim_str + ", " + std::to_string(dim_vec[i]) + "]";
-                str += dim_str;
-                str += "\n";
+                str += dim_str + "\n";
             }
             else {
                 global_symbol_table[ident] = symbol_t{(int)(dim_vec.size()), symbol_tag::Symbol_Arr};
-                str += "global @";
-                str += ident;
-                str += " = alloc ";
+                str += "global @" + ident + " = alloc ";
                 std::string dim_str;
                 dim_str += ("[i32, " + std::to_string(dim_vec[0]) + "]");
                 for(int i = 1; i < dim_vec.size(); ++i) 
                     dim_str = "[" + dim_str + ", " + std::to_string(dim_vec[i]) + "]";
-                str += dim_str;
-                str += ", zeroinit\n";
+                str += dim_str + ", zeroinit\n";
             }
         }
         return str;
@@ -2673,14 +2276,18 @@ class VarDefAST : public BaseAST {
     }
 };
 
-// InitVal Auxiliary data
+/**
+ * InitVal Type Info.
+*/
 enum InitValType {
     InitVal_Exp,
     InitVal_Null,
     InitVal_Vec
 };
 
-// InitVal
+/**
+ * InitValAST represents non-terminal InitVal.
+*/
 class InitValAST : public BaseAST {
   public:
     InitValType type;

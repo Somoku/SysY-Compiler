@@ -35,10 +35,6 @@ int main(int argc, const char *argv[]) {
   auto ret = yyparse(ast);
   assert(!ret);
 
-  // 输出解析得到的 AST, 其实就是个字符串
-  // ast->Dump();
-  // cout << endl;
-
   // 获取字符串形式的 Koopa IR
   std::string IR = ast->DumpIR();
   char* str = new char[IR.size() + 1];
