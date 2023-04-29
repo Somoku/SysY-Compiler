@@ -83,11 +83,11 @@ void Visit(const koopa_raw_function_t &func, int &st_id) {
   std::cout << (func->name + 1) << ":\n";
 
   // 获取存在返回值的指令数
-  int S_num = get_S_num(func->bbs);
+  unsigned int S_num = get_S_num(func->bbs);
   bool RA_call = false;
-  int RA_num = get_RA_num(func->bbs, RA_call);
+  unsigned int RA_num = get_RA_num(func->bbs, RA_call);
   st_id = RA_num * 4;
-  int st_offset = (((S_num + RA_num + RA_call) * 4 + 15) / 16) * 16;
+  unsigned int st_offset = (((S_num + RA_num + RA_call) * 4 + 15) / 16) * 16;
   if(st_offset != 0){
     if (st_offset <= 2048)
       std::cout << "\taddi sp, sp, -" << st_offset << std::endl;
@@ -457,7 +457,11 @@ void Visit(const koopa_raw_branch_t &branch) {
     std::cout << "\tadd t6, sp, t6\n";
     std::cout << "\tlw t0, (t6)\n";
   }
-  std::cout << "\tbnez t0, " << (branch.true_bb->name + 1) << std::endl;
+  std::cout << "\tbnez t0, " << "median_branch" << (branch.true_bb->name + 1) << std::endl;
+  std::cout << "\tbeqz t0, " << "median_branch" << (branch.false_bb->name + 1) << std::endl;
+  std::cout << "median_branch" << (branch.true_bb->name + 1) << ":" << std::endl;
+  std::cout << "\tj " << (branch.true_bb->name + 1) << std::endl;
+  std::cout << "median_branch" << (branch.false_bb->name + 1) << ":" << std::endl;
   std::cout << "\tj " << (branch.false_bb->name + 1) << std::endl;
 }
 
@@ -623,8 +627,8 @@ void Visit(const koopa_raw_value_t &value, int &st_id) {
 }
 
 // 访问 raw slice, 获取存在返回值的指令个数
-int get_S_num(const koopa_raw_slice_t &slice) {
-  int S_num = 0;
+unsigned int get_S_num(const koopa_raw_slice_t &slice) {
+  unsigned int S_num = 0;
   for (size_t i = 0; i < slice.len; ++i) {
     auto ptr = slice.buffer[i];
     // 根据 slice 的 kind 决定将 ptr 视作何种元素
@@ -646,13 +650,13 @@ int get_S_num(const koopa_raw_slice_t &slice) {
 }
 
 // 访问指令，若该指令存在返回值，则返回 1, 否则返回 0
-int get_S_num(const koopa_raw_value_t &value) {
+unsigned int get_S_num(const koopa_raw_value_t &value) {
   const auto &ty = value->ty;
   koopa_raw_type_kind_t *base;
-  int arr_size;
+  unsigned int arr_size;
   if(ty->tag == KOOPA_RTT_UNIT)
     return 0;
-  if(ty->tag == KOOPA_RTT_POINTER) {
+  if(value->kind.tag == KOOPA_RVT_ALLOC) {
     if(ty->data.pointer.base->tag == KOOPA_RTT_ARRAY) {
         base = (koopa_raw_type_kind_t *)(ty->data.pointer.base);
         arr_size = 4;
@@ -669,8 +673,8 @@ int get_S_num(const koopa_raw_value_t &value) {
 }
 
 // 访问 raw slice, 获取需要分配栈空间的参数数量以及是否要为 ra 分配空间
-int get_RA_num(const koopa_raw_slice_t &slice, bool &RA_call) {
-  int RA_num = 0;
+unsigned int get_RA_num(const koopa_raw_slice_t &slice, bool &RA_call) {
+  unsigned int RA_num = 0;
   for (size_t i = 0; i < slice.len; ++i) {
     auto ptr = slice.buffer[i];
     switch(slice.kind) {
@@ -688,11 +692,14 @@ int get_RA_num(const koopa_raw_slice_t &slice, bool &RA_call) {
 }
 
 // 访问指令，若指令为 call 指令，则返回参数个数 - 8，并设 RA_call 为 true
-int get_RA_num(const koopa_raw_value_t &value, bool &RA_call) {
+unsigned int get_RA_num(const koopa_raw_value_t &value, bool &RA_call) {
   if(value->kind.tag != KOOPA_RVT_CALL)
     return 0;
   RA_call = true;
-  return (int32_t)value->kind.data.call.args.len - 8;
+  unsigned int param_num = value->kind.data.call.args.len;
+  if(param_num <= 8)
+    return 0;
+  return param_num - 8;
 }
 
 // 计算 zeroinit 的数据大小

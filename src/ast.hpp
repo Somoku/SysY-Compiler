@@ -5,23 +5,22 @@
 #include <iostream>
 #include <cassert>
 #include <vector>
+#include <stack>
 #include <unordered_map>
 #include "symbol.hpp"
 
 /** Variable number */
 static int ast_i = 0;
 /** Block number */
-static int block_id = 0;
+static unsigned int block_id = 0;
 /** Logical op number */
-static int logical_id = 0;
+static unsigned int logical_id = 0;
 /** While label number */
-static int while_id = 0;
+static unsigned int while_id = 0;
 /** Function entry number */
-static int entry_id = 0;
-/** True if ret exists inside a block */
-static bool block_ret = false;
-/** True if jump exists inside a block */
-static bool block_jump = false;
+static unsigned int entry_id = 0;
+/** True if jump or ret exists inside a block */
+static bool block_end = false;
 /** True if it's a parameter reference */
 static bool is_param_r = false;
 /** True if current pointed array's size equal to whole size */
@@ -29,7 +28,7 @@ static bool is_all_layer = false;
 /** Symbol field */
 static symbol_field field = symbol_field::Field_Global;
 /** Vector of `while_id` as an iterative struct */
-static std::vector<int> while_id_vec;
+static std::stack<int> while_id_stack;
 /** Current local symbol table */
 extern symbol_table_list_elem_t *curr_symbol_table;
 /** Global symbol table */
@@ -64,7 +63,7 @@ class BaseAST {
      * @brief Return array initial value whose blank is filled with 0.
      * @param dim_vec Vector of dimension value.
     */
-    virtual std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const = 0;
+    virtual std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const = 0;
 };
 
 /**
@@ -93,7 +92,7 @@ class CompUnitRootAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -160,7 +159,7 @@ class CompUnitAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -190,13 +189,18 @@ class FuncDefAST : public BaseAST {
         global_symbol_table[ident] = symbol_t{func_type->ConstCalc(), symbol_tag::Symbol_Func};
         field = symbol_field::Field_Local;
         if(type == FuncDef_Noparam) {
-            str += "fun @" + ident + "()" + func_type->DumpIR() + "{\n"
-                 + "\%entry_" + std::to_string(entry_id++) + ":\n";
-            block_ret = false;
-            block_jump = false;
+            str += "fun @" + ident + "()" + func_type->DumpIR() + "{\n";
+            // %entry_<entry_id> Block
+            block_end = false;
+            str += "\%entry_" + std::to_string(entry_id++) + ":\n";
             str += block->DumpIR();
-            if(!block_ret && !block_jump)
-                str += "\tret\n";
+            if(!block_end) {
+                if(func_type->ConstCalc() == 0)
+                    str += "\tret 0\n";
+                else
+                    str += "\tret\n";
+                block_end = true;
+            }
             str += "}\n";
         }
         else {
@@ -207,15 +211,20 @@ class FuncDefAST : public BaseAST {
                 str += (*funcfparamvec)[i]->getIdent();
                 str += ", ";
             }
-            str += (*funcfparamvec)[0]->getIdent() + ")" + func_type->DumpIR() + "{\n"
-                 + "\%entry_" + std::to_string(entry_id++) + ":\n";
-            block_ret = false;
-            block_jump = false;
+            str += (*funcfparamvec)[0]->getIdent() + ")" + func_type->DumpIR() + "{\n";
+            // %entry_<entry_id> Block
+            block_end = false;
+            str += "\%entry_" + std::to_string(entry_id++) + ":\n";
             for(int i = vec_size - 1; i >= 0; i--)
                 str += (*funcfparamvec)[i]->DumpIR();
             str += block->DumpIR();
-            if(!block_ret && !block_jump)
-                str += "\tret\n";
+            if(!block_end) {
+                if(func_type->ConstCalc() == 0)
+                    str += "\tret 0\n";
+                else
+                    str += "\tret\n";
+                block_end = true;
+            }
             str += "}\n";
             delete_symbol_table();
         }
@@ -235,7 +244,7 @@ class FuncDefAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -277,7 +286,7 @@ class FuncTypeAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -387,7 +396,7 @@ class FuncFParamAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -433,7 +442,7 @@ class BlockAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -473,7 +482,7 @@ class StmtAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -504,69 +513,71 @@ class OpenStmtAST : public BaseAST {
         int else_id = 0;
         int end_id = 0;
         int while_block_id = 0;
-        bool then_ret = false;
-        bool else_ret = false;
         switch(type) {
             case Open_If:
                 then_id = block_id++;
                 end_id = block_id++;
                 str += exp->DumpIR() + "\tbr \%" + std::to_string(ast_i - 1) + ", \%block_"
-                     + std::to_string(then_id) + ", \%block_" + std::to_string(end_id) + "\n"
-                     + "\%block_" + std::to_string(then_id) + ":\n";
-                block_ret = false;
-                block_jump = false;
+                     + std::to_string(then_id) + ", \%block_" + std::to_string(end_id) + "\n";
+                // %block_<then_id> Block
+                block_end = false;
+                str += "\%block_" + std::to_string(then_id) + ":\n";
                 str += stmt->DumpIR();
-                if(!block_ret && !block_jump)
+                if(!block_end) {
                     str += "\tjump \%block_" + std::to_string(end_id) + "\n";
+                    block_end = true;
+                }
+                // %block_<end_id> Block
+                block_end = false;
                 str += "\%block_" + std::to_string(end_id) + ":\n";
-                block_ret = false;
-                block_jump = false;
                 break;
             case Open_Else:
                 then_id = block_id++;
                 else_id = block_id++;
                 end_id = block_id++;
                 str += exp->DumpIR() + "\tbr \%" + std::to_string(ast_i - 1) + ", \%block_"
-                     + std::to_string(then_id) + ", \%block_" + std::to_string(else_id)
-                     + "\n\%block_" + std::to_string(then_id) + ":\n";
-                block_ret = false;
-                block_jump = false;
+                     + std::to_string(then_id) + ", \%block_" + std::to_string(else_id) + "\n";
+                // %block_<then_id> Block
+                block_end = false;
+                str += "\%block_" + std::to_string(then_id) + ":\n";
                 str += stmt->DumpIR();
-                then_ret = block_ret;
-                if(!block_ret && !block_jump)
+                if(!block_end) {
                     str += "\tjump \%block_" + std::to_string(end_id) + "\n";
-                str += "\%block_" + std::to_string(else_id) + ":\n";
-                block_ret = false;
-                block_jump = false;
-                str += openstmt->DumpIR();
-                else_ret = block_ret;
-                if(!block_ret && !block_jump) 
-                    str += "\tjump \%block_" + std::to_string(end_id) + "\n";
-                if(!then_ret || !else_ret){
-                    str += "\%block_" + std::to_string(end_id) + ":\n";
-                    block_ret = false;
+                    block_end = true;
                 }
+                // %block_<else_id> Block
+                block_end = false;
+                str += "\%block_" + std::to_string(else_id) + ":\n";
+                str += openstmt->DumpIR();
+                if(!block_end) {
+                    str += "\tjump \%block_" + std::to_string(end_id) + "\n";
+                    block_end = true;
+                }
+                // %block_<end_id> Block
+                block_end = false;
+                str += "\%block_" + std::to_string(end_id) + ":\n";
                 break;
             case Open_While:
-                while_id_vec.push_back(while_id);
-                while_block_id = while_id;
-                while_id++;
-                str += "\tjump \%while_entry_" + std::to_string(while_block_id) + "\n\%while_entry_"
-                     + std::to_string(while_block_id) + ":\n";
-                block_ret = false;
-                block_jump = false;
+                while_id_stack.push(while_id++);
+                while_block_id = while_id_stack.top();
+                str += "\tjump \%while_entry_" + std::to_string(while_block_id) + "\n";
+                // %while_entry_<while_blcok_id> Block
+                block_end = false;
+                str += "\%while_entry_" + std::to_string(while_block_id) + ":\n";
                 str += exp->DumpIR() + "\tbr \%" + std::to_string(ast_i - 1) + ", \%while_body_"
-                     + std::to_string(while_block_id) + ", \%while_end_" + std::to_string(while_block_id)
-                     + "\n\%while_body_" + std::to_string(while_block_id) + ":\n";
-                block_ret = false;
-                block_jump = false;
+                     + std::to_string(while_block_id) + ", \%while_end_" + std::to_string(while_block_id) + "\n";
+                // %while_body_<while_block_id> Block
+                block_end = false;
+                str += "\%while_body_" + std::to_string(while_block_id) + ":\n";
                 str += openstmt->DumpIR();
-                if(!block_ret && !block_jump)
+                if(!block_end) {
                     str += "\tjump \%while_entry_" + std::to_string(while_block_id) + "\n";
-                while_id_vec.pop_back();
+                    block_end = true;
+                }
+                // %while_end_<while_block_id> Block
+                block_end = false;
                 str += "\%while_end_" + std::to_string(while_block_id) + ":\n";
-                block_ret = false;
-                block_jump = false;
+                while_id_stack.pop();
                 break;
             default:
                 assert(false);
@@ -586,7 +597,7 @@ class OpenStmtAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -617,8 +628,6 @@ class ClosedStmtAST : public BaseAST {
         int else_id = 0;
         int end_id = 0;
         int while_block_id = 0;
-        bool then_ret = false;
-        bool else_ret = false;
         switch(type) {
             case Closed_NonIf:
                 str += stmt->DumpIR();
@@ -628,45 +637,48 @@ class ClosedStmtAST : public BaseAST {
                 else_id = block_id++;
                 end_id = block_id++;
                 str += exp->DumpIR() + "\tbr \%" + std::to_string(ast_i - 1) + ", \%block_" + std::to_string(then_id)
-                     + ", \%block_" + std::to_string(else_id) + "\n\%block_" + std::to_string(then_id) + ":\n";
-                block_ret = false;
-                block_jump = false;
+                     + ", \%block_" + std::to_string(else_id) + "\n";
+                // %block_<then_id> Block
+                block_end = false;
+                str += "\%block_" + std::to_string(then_id) + ":\n";
                 str += stmt->DumpIR();
-                then_ret = block_ret;
-                if(!block_ret && !block_jump) 
+                if(!block_end) {
                     str += "\tjump \%block_" + std::to_string(end_id) + "\n";
-                str += "\%block_" + std::to_string(else_id) + ":\n";
-                block_ret = false;
-                block_jump = false;
-                str += closedstmt->DumpIR();
-                else_ret = block_ret;
-                if(!block_ret && !block_jump)
-                    str += "\tjump \%block_" + std::to_string(end_id) + "\n";
-                if(!then_ret || !else_ret){
-                    str += "\%block_" + std::to_string(end_id) + ":\n";
-                    block_ret = false;
-                    block_jump = false;
+                    block_end = true;
                 }
+                // %block_<else_id> Block
+                block_end = false;
+                str += "\%block_" + std::to_string(else_id) + ":\n";
+                str += closedstmt->DumpIR();
+                if(!block_end) {
+                    str += "\tjump \%block_" + std::to_string(end_id) + "\n";
+                    block_end = true;
+                }
+                // %block_<end_id> Block
+                block_end = false;
+                str += "\%block_" + std::to_string(end_id) + ":\n";
                 break;
             case Closed_While:
-                while_id_vec.push_back(while_id);
-                while_block_id = while_id;
-                while_id++;
-                str += "\tjump \%while_entry_" + std::to_string(while_block_id) + "\n\%while_entry_"
-                     + std::to_string(while_block_id) + ":\n";
-                block_ret = false;
-                block_jump = false;
+                while_id_stack.push(while_id++);
+                while_block_id = while_id_stack.top();
+                str += "\tjump \%while_entry_" + std::to_string(while_block_id) + "\n";
+                // %while_entry_<while_blcok_id> Block
+                block_end = false;
+                str += "\%while_entry_" + std::to_string(while_block_id) + ":\n";
                 str += exp->DumpIR() + "\tbr \%" + std::to_string(ast_i - 1) + ", \%while_body_" + std::to_string(while_block_id)
-                     + ", \%while_end_" + std::to_string(while_block_id) + "\n\%while_body_" + std::to_string(while_block_id) + ":\n";
-                block_ret = false;
-                block_jump = false;
+                     + ", \%while_end_" + std::to_string(while_block_id) + "\n";
+                // %while_body_<while_block_id> Block
+                block_end = false;
+                str += "\%while_body_" + std::to_string(while_block_id) + ":\n";
                 str += stmt->DumpIR();
-                if(!block_ret && !block_jump)
+                if(!block_end) {
                     str += "\tjump \%while_entry_" + std::to_string(while_block_id) + "\n";
-                while_id_vec.pop_back();
+                    block_end = true;
+                }
+                // %while_end_<while_block_id> Block
+                block_end = false;
                 str += "\%while_end_" + std::to_string(while_block_id) + ":\n";
-                block_ret = false;
-                block_jump = false;
+                while_id_stack.pop();
                 break;
             default:
                 assert(false);
@@ -686,7 +698,7 @@ class ClosedStmtAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -727,7 +739,7 @@ class NonIfStmtAST : public BaseAST {
         switch(type) {
             case NonIf_Ret:
                 str += exp->DumpIR() + "\tret \%" + std::to_string(ast_i - 1) + "\n";
-                block_ret = true;
+                block_end = true;
                 break;
             case NonIf_Lval:
                 str += exp->DumpIR();
@@ -771,24 +783,24 @@ class NonIfStmtAST : public BaseAST {
                 break;
             case NonIf_Ret_Null:
                 str += "\tret\n";
-                block_ret = true;
+                block_end = true;
                 break;
             case NonIf_Break:
-                if(while_id_vec.empty())
+                if(while_id_stack.empty())
                     break;
-                while_block_id = while_id_vec[while_id_vec.size() - 1];
-                if(!block_ret && !block_jump){
+                while_block_id = while_id_stack.top();
+                if(!block_end) {
                     str += "\tjump \%while_end_" + std::to_string(while_block_id) + "\n";
-                    block_jump = true;
+                    block_end = true;
                 }
                 break;
             case NonIf_Continue:
-                if(while_id_vec.empty())
+                if(while_id_stack.empty())
                     break;
-                while_block_id = while_id_vec[while_id_vec.size() - 1];
-                if(!block_ret && !block_jump){
+                while_block_id = while_id_stack.top();
+                if(!block_end) {
                     str += "\tjump \%while_entry_" + std::to_string(while_block_id) + "\n";
-                    block_jump = true;
+                    block_end = true;
                 }
                 break;
             default:
@@ -809,7 +821,7 @@ class NonIfStmtAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -840,7 +852,7 @@ class ExpAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -908,7 +920,7 @@ class PrimaryExpAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -1019,7 +1031,7 @@ class UnaryExpAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -1105,7 +1117,7 @@ class MulExpAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -1180,7 +1192,7 @@ class AddExpAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -1277,7 +1289,7 @@ class RelExpAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -1352,7 +1364,7 @@ class EqExpAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -1388,14 +1400,20 @@ class LAndExpAST : public BaseAST {
                 str += "\t@result_" + std::to_string(logic_id) + " = alloc i32\n" + landexp->DumpIR() + "\t\%"
                      + std::to_string(ast_i) + " = ne \%" + std::to_string(ast_i - 1) + ", 0\n";
                 ast_i++;
-                str += "\tstore \%" + std::to_string(ast_i - 1) + ", @result_" + std::to_string(logic_id) + "\n\tbr \%"
-                     + std::to_string(ast_i - 1) + ", \%then_" + std::to_string(logic_id) + ", \%end_" + std::to_string(logic_id)
-                     + "\n\%then_" + std::to_string(logic_id) + ":\n" + eqexp->DumpIR() + "\t\%" + std::to_string(ast_i)
+                str += "\tstore \%" + std::to_string(ast_i - 1) + ", @result_" + std::to_string(logic_id) + "\n";
+                str += "\tbr \%" + std::to_string(ast_i - 1) + ", \%then_" + std::to_string(logic_id) + ", \%end_" + std::to_string(logic_id) + "\n";
+                // %then_<logic_id> Block
+                block_end = false;
+                str += "\%then_" + std::to_string(logic_id) + ":\n";
+                str += eqexp->DumpIR() + "\t\%" + std::to_string(ast_i)
                      + " = ne \%" + std::to_string(ast_i - 1) + ", 0\n";
                 ast_i++;
-                str += "\tstore \%" + std::to_string(ast_i - 1) + ", @result_" + std::to_string(logic_id) + "\n\tjump \%end_"
-                     + std::to_string(logic_id) + "\n\%end_" + std::to_string(logic_id) + ":\n\t\%" + std::to_string(ast_i)
-                     + " = load @result_" + std::to_string(logic_id) + "\n";
+                str += "\tstore \%" + std::to_string(ast_i - 1) + ", @result_" + std::to_string(logic_id) + "\n";
+                str += "\tjump \%end_" + std::to_string(logic_id) + "\n";
+                // %end_<logic_id> Block
+                block_end = false;
+                str += "\%end_" + std::to_string(logic_id) + ":\n";
+                str += "\t\%" + std::to_string(ast_i) + " = load @result_" + std::to_string(logic_id) + "\n";
                 ast_i++;
                 break;
             default:
@@ -1418,7 +1436,7 @@ class LAndExpAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -1454,14 +1472,19 @@ class LOrExpAST : public BaseAST {
                 str += "\t@result_" + std::to_string(logic_id) + " = alloc i32\n" + lorexp->DumpIR() + "\t\%"
                      + std::to_string(ast_i) + " = ne \%" + std::to_string(ast_i - 1) + ", 0\n";
                 ast_i++;
-                str += "\tstore \%" + std::to_string(ast_i - 1) + ", @result_" + std::to_string(logic_id) + "\n\tbr \%"
-                     + std::to_string(ast_i - 1) + ", \%end_" + std::to_string(logic_id) + ", \%then_" + std::to_string(logic_id)
-                     + "\n\%then_" + std::to_string(logic_id) + ":\n" + landexp->DumpIR() + "\t\%" + std::to_string(ast_i)
-                     + " = ne \%" + std::to_string(ast_i - 1) + ", 0\n";
+                str += "\tstore \%" + std::to_string(ast_i - 1) + ", @result_" + std::to_string(logic_id) + "\n";
+                str += "\tbr \%" + std::to_string(ast_i - 1) + ", \%end_" + std::to_string(logic_id) + ", \%then_" + std::to_string(logic_id) + "\n";
+                // %then_<logic_id> Block
+                block_end = false;
+                str += "\%then_" + std::to_string(logic_id) + ":\n";
+                str += landexp->DumpIR() + "\t\%" + std::to_string(ast_i) + " = ne \%" + std::to_string(ast_i - 1) + ", 0\n";
                 ast_i++;
-                str += "\tstore \%" + std::to_string(ast_i - 1) + ", @result_" + std::to_string(logic_id) + "\n\tjump \%end_"
-                     + std::to_string(logic_id) + "\n\%end_" + std::to_string(logic_id) + ":\n\t\%" + std::to_string(ast_i)
-                     + " = load @result_" + std::to_string(logic_id) + "\n";
+                str += "\tstore \%" + std::to_string(ast_i - 1) + ", @result_" + std::to_string(logic_id) + "\n";
+                str += "\tjump \%end_" + std::to_string(logic_id) + "\n";
+                // %end_<logic_id> Block
+                block_end = false;
+                str += "\%end_" + std::to_string(logic_id) + ":\n";
+                str += "\t\%" + std::to_string(ast_i) + " = load @result_" + std::to_string(logic_id) + "\n";
                 ast_i++;
                 break;
             default:
@@ -1484,7 +1507,7 @@ class LOrExpAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -1524,7 +1547,7 @@ class DeclAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -1558,7 +1581,7 @@ class ConstDeclAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -1588,7 +1611,7 @@ class BTypeAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -1617,6 +1640,7 @@ class ConstDefAST : public BaseAST {
         std::unique_ptr<std::vector<int> > arr_init;
         int const_val, arr_len, vec_size;
         std::vector<int> dim_vec;
+        int elem_num;
         switch(type) {
             case ConstDef_Int:
                 const_val = ConstCalc();
@@ -1634,7 +1658,9 @@ class ConstDefAST : public BaseAST {
                     dim_vec.push_back(dim);
                     arr_len *= dim;
                 }
-                arr_init = constinitval->getArrInit(dim_vec);
+                arr_init = constinitval->getArrInit(dim_vec, str);
+                elem_num = arr_init->size();
+                for(int _ = elem_num; _ < arr_len; ++_) arr_init->push_back(0);
                 if(field == symbol_field::Field_Local) {
                     (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
                         symbol_t{(int)(dim_vec.size()), symbol_tag::Symbol_Arr};
@@ -1649,7 +1675,7 @@ class ConstDefAST : public BaseAST {
                         int index = i;
                         int layer_size = arr_len / dim_vec[vec_size - 1];
                         int k = 0;
-                        while(layer_size != 1) {
+                        while(k < vec_size - 1) {
                             arr_index.push_back(index / layer_size);
                             index = index % layer_size;
                             layer_size = layer_size / dim_vec[vec_size - 1 - (++k)];
@@ -1714,7 +1740,7 @@ class ConstDefAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -1755,7 +1781,7 @@ class ConstInitValAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         int arr_size = 1;
         int elem_num = 0;
@@ -1768,7 +1794,8 @@ class ConstInitValAST : public BaseAST {
                 new_dim_vec.clear();
                 ConstInitValAST *constinitval = reinterpret_cast<ConstInitValAST *>
                                                 ((*constinitvalvec)[i].get());
-                if(constinitval->type == ConstInitValType::ConstInitVal_Vec) {
+                if(constinitval->type == ConstInitValType::ConstInitVal_Vec ||
+                  constinitval->type == ConstInitValType::ConstInitVal_Null) {
                     if(elem_num == 0) {
                         new_dim_vec = dim_vec;
                         new_dim_vec.pop_back();
@@ -1784,12 +1811,13 @@ class ConstInitValAST : public BaseAST {
                             }
                             else break;
                         }
+                        new_dim_vec.pop_back();
                     }
                     if(new_dim_vec.empty()) {
                         std::cerr << "Error: Invalid Array.\n";
                         assert(false);
                     }
-                    std::unique_ptr<std::vector<int> > new_arr = constinitval->getArrInit(new_dim_vec);
+                    std::unique_ptr<std::vector<int> > new_arr = constinitval->getArrInit(new_dim_vec, str);
                     arr_ptr->insert(arr_ptr->end(), new_arr->begin(), new_arr->end());
                     elem_num = arr_ptr->size();
                 }
@@ -1804,8 +1832,9 @@ class ConstInitValAST : public BaseAST {
             std::cerr << "Error: Invalid ConstInitVal.\n";
             assert(false);
         }
-        if(elem_num < arr_size)
+        if(elem_num < arr_size) {
             for(int _ = elem_num; _ < arr_size; ++_) arr_ptr->push_back(0);
+        }
         return arr_ptr; 
     }
 };
@@ -1829,7 +1858,7 @@ class BlockItemAST : public BaseAST {
 
     std::string DumpIR() const override {
         std::string str;
-        if(block_ret || block_jump)
+        if(block_end)
             return str;
         switch(type) {
             case BlockItem_Decl:
@@ -1856,7 +1885,7 @@ class BlockItemAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -2039,7 +2068,7 @@ class LValAST : public BaseAST {
         return str;
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -2069,7 +2098,7 @@ class ConstExpAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -2103,7 +2132,7 @@ class VarDeclAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -2164,7 +2193,14 @@ class VarDefAST : public BaseAST {
                 dim_vec.push_back(dim);
                 arr_len *= dim;
             }
-            arr_init = initval->getArrInit(dim_vec);
+            arr_init = initval->getArrInit(dim_vec, str);
+            int elem_num = arr_init->size();
+            if(elem_num < arr_len) {
+                if(field == symbol_field::Field_Local)
+                    for(int _ = elem_num; _ < arr_len; ++_) arr_init->push_back(-1);
+                else
+                    for(int _ = elem_num; _ < arr_len; ++_) arr_init->push_back(0);
+            }
             if(field == symbol_field::Field_Local) {
                 (*(curr_symbol_table->symbol_table_ptr->symbol_table_elem_ptr))[ident] = 
                     symbol_t{(int)(dim_vec.size()), symbol_tag::Symbol_Arr};
@@ -2180,7 +2216,7 @@ class VarDefAST : public BaseAST {
                     int index = i;
                     int layer_size = arr_len / dim_vec[vec_size - 1];
                     int k = 0;
-                    while(layer_size != 1) {
+                    while(k < vec_size - 1) {
                         arr_index.push_back(index / layer_size);
                         index = index % layer_size;
                         layer_size = layer_size / dim_vec[vec_size - 1 - (++k)];
@@ -2195,7 +2231,10 @@ class VarDefAST : public BaseAST {
                              + std::to_string(arr_index[j]) + "\n";
                         ast_i++;
                     }
-                    str += "\tstore " + std::to_string((*arr_init)[i]) + ", \%" + std::to_string(ast_i - 1) + "\n";
+                    if((*arr_init)[i] != -1)
+                        str += "\tstore \%" + std::to_string((*arr_init)[i]) + ", \%" + std::to_string(ast_i - 1) + "\n";
+                    else
+                        str += "\tstore 0, \%" + std::to_string(ast_i - 1) + "\n";
                 }
             }
             else {
@@ -2270,7 +2309,7 @@ class VarDefAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         return arr_ptr; 
     }
@@ -2312,7 +2351,7 @@ class InitValAST : public BaseAST {
         return std::string();
     }
 
-    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec) const override {
+    std::unique_ptr<std::vector<int> > getArrInit(std::vector<int> dim_vec, std::string& str) const override {
         std::unique_ptr<std::vector<int> > arr_ptr = std::make_unique<std::vector<int> >();
         int arr_size = 1;
         int elem_num = 0;
@@ -2325,7 +2364,8 @@ class InitValAST : public BaseAST {
                 new_dim_vec.clear();
                 InitValAST *initval = reinterpret_cast<InitValAST *>
                                                 ((*initvalvec)[i].get());
-                if(initval->type == InitValType::InitVal_Vec) {
+                if(initval->type == InitValType::InitVal_Vec ||
+                  initval->type == InitValType::InitVal_Null) {
                     if(elem_num == 0) {
                         new_dim_vec = dim_vec;
                         new_dim_vec.pop_back();
@@ -2341,17 +2381,24 @@ class InitValAST : public BaseAST {
                             }
                             else break;
                         }
+                        new_dim_vec.pop_back();
                     }
                     if(new_dim_vec.empty()) {
                         std::cerr << "Error: Invalid Array.\n";
                         assert(false);
                     }
-                    std::unique_ptr<std::vector<int> > new_arr = initval->getArrInit(new_dim_vec);
+                    std::unique_ptr<std::vector<int> > new_arr = initval->getArrInit(new_dim_vec, str);
                     arr_ptr->insert(arr_ptr->end(), new_arr->begin(), new_arr->end());
                     elem_num = arr_ptr->size();
                 }
                 else if(initval->type == InitValType::InitVal_Exp) {
-                    arr_ptr->push_back(initval->ConstCalc());
+                    if(field == Field_Local) {
+                        str += initval->DumpIR();
+                        arr_ptr->push_back(ast_i - 1);
+                    }
+                    else {
+                        arr_ptr->push_back(initval->ConstCalc());
+                    }
                     elem_num++;
                     continue;
                 }
@@ -2361,8 +2408,12 @@ class InitValAST : public BaseAST {
             std::cerr << "Error: Invalid ConstInitVal.\n";
             assert(false);
         }
-        if(elem_num < arr_size)
-            for(int _ = elem_num; _ < arr_size; ++_) arr_ptr->push_back(0);
+        if(elem_num < arr_size) {
+            if(field == Field_Local)
+                for(int _ = elem_num; _ < arr_size; ++_) arr_ptr->push_back(-1);
+            else
+                for(int _ = elem_num; _ < arr_size; ++_) arr_ptr->push_back(0);
+        }
         return arr_ptr; 
     }
 };
