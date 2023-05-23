@@ -97,13 +97,13 @@ void Visit(const koopa_raw_function_t &func, int &st_id) {
     }
     if(RA_call) {
       if(st_offset - 4 <= 2047) {
-        std::cout << "\taddi t6, sp, " << st_offset - 4 << std::endl;
+        std::cout << "\tsw ra, " << st_offset - 4 << "(sp)\n";
       }
       else {
         std::cout << "\tli t6, " << st_offset - 4 << std::endl;
         std::cout << "\tadd t6, t6, sp\n";
+        std::cout << "\tsw ra, (t6)\n";
       }
-      std::cout << "\tsw ra, (t6)\n";
     }
   } 
   // 访问所有基本块
@@ -161,9 +161,14 @@ void Visit(const koopa_raw_value_t &value, int st_offset, int &st_id, bool RA_ca
       Visit(kind.data.call, st_offset);
       if(value->ty->tag != KOOPA_RTT_UNIT) {
         stack_offset[value] = st_id;
-        std::cout << "\tli t6, " << st_id << std::endl;
-        std::cout << "\tadd t6, t6, sp\n";
-        std::cout << "\tsw a0, (t6)\n";
+        if (st_id <= 2047 && st_id >= -2048) {
+          std::cout << "\tsw a0, " << st_id << "(sp)\n";
+        }
+        else {
+          std::cout << "\tli t6, " << st_id << std::endl;
+          std::cout << "\tadd t6, t6, sp\n";
+          std::cout << "\tsw a0, (t6)\n";
+        }
         st_id += 4;
       }
       break;
@@ -196,21 +201,26 @@ void Visit(const koopa_raw_return_t &ret, int st_offset, bool RA_call) {
     if (kind.tag == KOOPA_RVT_INTEGER)
       std::cout << "\tli a0, " << kind.data.integer.value << std::endl;
     else {
-      std::cout << "\tli t1, " << stack_offset[ret.value] << std::endl;
-      std::cout << "\tadd t1, t1, sp\n";
-      std::cout << "\tlw a0, (t1)\n";
+      if (stack_offset[ret.value] <= 2047 && stack_offset[ret.value] >= -2048) {
+        std::cout << "\tlw a0, " << stack_offset[ret.value] << "(sp)\n";
+      }
+      else {
+        std::cout << "\tli t1, " << stack_offset[ret.value] << std::endl;
+        std::cout << "\tadd t1, t1, sp\n";
+        std::cout << "\tlw a0, (t1)\n";
+      }
     }
   }
   if(st_offset != 0){
     if(RA_call) {
       if(st_offset - 4 <= 2047) {
-        std::cout << "\taddi t6, sp, " << st_offset - 4 << std::endl;
+        std::cout << "\tlw ra, " << st_offset - 4 << "(sp)\n";
       }
       else {
         std::cout << "\tli t6, " << st_offset - 4 << std::endl;
         std::cout << "\tadd t6, t6, sp\n";
+        std::cout << "\tlw ra, (t6)\n";
       }
-      std::cout << "\tlw ra, (t6)\n";
     }
     if (st_offset <= 2047)
       std::cout << "\taddi sp, sp, " << st_offset << std::endl;
@@ -238,9 +248,14 @@ void Visit(const koopa_raw_binary_t &binary, int &st_id) {
       std::cout << "\tli t2, " << binary.lhs->kind.data.integer.value << std::endl;
   }
   else{
-    std::cout << "\tli t4, " << stack_offset[binary.lhs] << std::endl; 
-    std::cout << "\tadd t4, sp, t4\n";
-    std::cout << "\tlw t2, (t4)\n";
+    if (stack_offset[binary.lhs] <= 2047 && stack_offset[binary.lhs] >= -2048) {
+      std::cout << "\tlw t2, " << stack_offset[binary.lhs] << "(sp)\n";
+    }
+    else {
+      std::cout << "\tli t4, " << stack_offset[binary.lhs] << std::endl; 
+      std::cout << "\tadd t4, sp, t4\n";
+      std::cout << "\tlw t2, (t4)\n";
+    }
   }
   if(binary.rhs->kind.tag == KOOPA_RVT_INTEGER) {
     rhs_int = true;
@@ -248,51 +263,38 @@ void Visit(const koopa_raw_binary_t &binary, int &st_id) {
       std::cout << "\tli t3, " << binary.rhs->kind.data.integer.value << std::endl;
   }
   else{
-    std::cout << "\tli t4, " << stack_offset[binary.rhs] << std::endl; 
-    std::cout << "\tadd t4, sp, t4\n";
-    std::cout << "\tlw t3, (t4)\n";
+    if (stack_offset[binary.rhs] <= 2047 && stack_offset[binary.rhs] >= -2048) {
+      std::cout << "\tlw t3, " << stack_offset[binary.rhs] << "(sp)\n";
+    }
+    else {
+      std::cout << "\tli t4, " << stack_offset[binary.rhs] << std::endl; 
+      std::cout << "\tadd t4, sp, t4\n";
+      std::cout << "\tlw t3, (t4)\n";
+    }
   }
 
   switch((koopa_raw_binary_op)binary.op) {
     case KOOPA_RBO_NOT_EQ:
       std::cout << "\txor t4, t2, t3\n";
       std::cout << "\tsnez t4, t4\n";
-      std::cout << "\tli t6, " << st_id << std::endl;
-      std::cout << "\tadd t6, sp, t6\n";
-      std::cout << "\tsw t4, (t6)\n";
       break;
     case KOOPA_RBO_EQ:
       std::cout << "\txor t4, t2, t3\n";
       std::cout << "\tseqz t4, t4\n";
-      std::cout << "\tli t6, " << st_id << std::endl;
-      std::cout << "\tadd t6, sp, t6\n";
-      std::cout << "\tsw t4, (t6)\n";
       break;
     case KOOPA_RBO_GT:
       std::cout << "\tsgt t4, t2, t3\n";
-      std::cout << "\tli t6, " << st_id << std::endl;
-      std::cout << "\tadd t6, sp, t6\n";
-      std::cout << "\tsw t4, (t6)\n";
       break;
     case KOOPA_RBO_LT:
       std::cout << "\tslt t4, t2, t3\n";
-      std::cout << "\tli t6, " << st_id << std::endl;
-      std::cout << "\tadd t6, sp, t6\n";
-      std::cout << "\tsw t4, (t6)\n";
       break;
     case KOOPA_RBO_GE:
       std::cout << "\tslt t4, t2, t3\n";
       std::cout << "\tseqz t4, t4\n";
-      std::cout << "\tli t6, " << st_id << std::endl;
-      std::cout << "\tadd t6, sp, t6\n";
-      std::cout << "\tsw t4, (t6)\n";
       break;
     case KOOPA_RBO_LE:
       std::cout << "\tsgt t4, t2, t3\n";
       std::cout << "\tseqz t4, t4\n";
-      std::cout << "\tli t6, " << st_id << std::endl;
-      std::cout << "\tadd t6, sp, t6\n";
-      std::cout << "\tsw t4, (t6)\n";
       break;
     case KOOPA_RBO_ADD:
       if(lhs_int && rhs_int && binary.lhs->kind.data.integer.value == 0)
@@ -304,48 +306,35 @@ void Visit(const koopa_raw_binary_t &binary, int &st_id) {
           std::cout << "\tli t3, " << binary.rhs->kind.data.integer.value << std::endl;
         std::cout << "\tadd t4, t2, t3\n";
       }
-      std::cout << "\tli t6, " << st_id << std::endl;
-      std::cout << "\tadd t6, sp, t6\n";
-      std::cout << "\tsw t4, (t6)\n";
       break;
     case KOOPA_RBO_SUB:
       std::cout << "\tsub t4, t2, t3\n";
-      std::cout << "\tli t6, " << st_id << std::endl;
-      std::cout << "\tadd t6, sp, t6\n";
-      std::cout << "\tsw t4, (t6)\n";
       break;
     case KOOPA_RBO_MUL:
       std::cout << "\tmul t4, t2, t3\n";
-      std::cout << "\tli t6, " << st_id << std::endl;
-      std::cout << "\tadd t6, sp, t6\n";
-      std::cout << "\tsw t4, (t6)\n";
       break;
     case KOOPA_RBO_DIV:
       std::cout << "\tdiv t4, t2, t3\n";
-      std::cout << "\tli t6, " << st_id << std::endl;
-      std::cout << "\tadd t6, sp, t6\n";
-      std::cout << "\tsw t4, (t6)\n";
       break;
     case KOOPA_RBO_MOD:
       std::cout << "\trem t4, t2, t3\n";
-      std::cout << "\tli t6, " << st_id << std::endl;
-      std::cout << "\tadd t6, sp, t6\n";
-      std::cout << "\tsw t4, (t6)\n";
       break;
     case KOOPA_RBO_AND:
       std::cout << "\tand t4, t2, t3\n";
-      std::cout << "\tli t6, " << st_id << std::endl;
-      std::cout << "\tadd t6, sp, t6\n";
-      std::cout << "\tsw t4, (t6)\n";
       break;
     case KOOPA_RBO_OR:
       std::cout << "\tor t4, t2, t3\n";
-      std::cout << "\tli t6, " << st_id << std::endl;
-      std::cout << "\tadd t6, sp, t6\n";
-      std::cout << "\tsw t4, (t6)\n";
       break;
     default:
       assert(false);
+  }
+  if (st_id <= 2047 && st_id >= -2048) {
+    std::cout << "\tsw t4, " << st_id << "(sp)\n";
+  }
+  else {
+    std::cout << "\tli t6, " << st_id << std::endl;
+    std::cout << "\tadd t6, sp, t6\n";
+    std::cout << "\tsw t4, (t6)\n";
   }
 }
 
@@ -357,15 +346,26 @@ void Visit(const koopa_raw_store_t &store, int &st_id, int st_offset) {
     if(store.value->kind.data.func_arg_ref.index < 8)
       std::cout << "\tmv t0, a" << store.value->kind.data.func_arg_ref.index << std::endl;
     else {
-      std::cout << "\tli t6, " << (store.value->kind.data.func_arg_ref.index - 8) * 4 + st_offset << std::endl;
-      std::cout << "\tadd t6, t6, sp\n";
-      std::cout << "\tlw t0, (t6)\n";
+      if ((store.value->kind.data.func_arg_ref.index - 8) * 4 + st_offset <= 2047 &&
+          (store.value->kind.data.func_arg_ref.index - 8) * 4 + st_offset >= -2048) {
+        std::cout << "\tlw t0, " << (store.value->kind.data.func_arg_ref.index - 8) * 4 + st_offset << "(sp)\n";
+      }
+      else {
+        std::cout << "\tli t6, " << (store.value->kind.data.func_arg_ref.index - 8) * 4 + st_offset << std::endl;
+        std::cout << "\tadd t6, t6, sp\n";
+        std::cout << "\tlw t0, (t6)\n";
+      }
     }
   }
   else {
-    std::cout << "\tli t6, " << stack_offset[store.value] << std::endl;
-    std::cout << "\tadd t6, sp, t6\n";
-    std::cout << "\tlw t0, (t6)\n";
+    if (stack_offset[store.value] <= 2047 && stack_offset[store.value] >= -2048) {
+      std::cout << "\tlw t0, " << stack_offset[store.value] << "(sp)\n";
+    }
+    else {
+      std::cout << "\tli t6, " << stack_offset[store.value] << std::endl;
+      std::cout << "\tadd t6, sp, t6\n";
+      std::cout << "\tlw t0, (t6)\n";
+    }
   }
   if(store.dest->kind.tag == KOOPA_RVT_GLOBAL_ALLOC) {
     std::cout << "\tla t6, " << store.dest->name + 1 << std::endl;
@@ -376,20 +376,30 @@ void Visit(const koopa_raw_store_t &store, int &st_id, int st_offset) {
     if(stack_offset[store.dest] == 0)
       std::cout << "\tlw t6, (sp)\n";
     else {
-      std::cout << "\tli t6, " << stack_offset[store.dest] << std::endl;
-      std::cout << "\tadd t6, t6, sp\n";
-      std::cout << "\tlw t5, (t6)\n";
+      if (stack_offset[store.dest] <= 2047 && stack_offset[store.dest] >= -2048) {
+        std::cout << "\tlw t5, " << stack_offset[store.dest] << "(sp)\n";
+      }
+      else {
+        std::cout << "\tli t6, " << stack_offset[store.dest] << std::endl;
+        std::cout << "\tadd t6, t6, sp\n";
+        std::cout << "\tlw t5, (t6)\n";
+      }
+      std::cout << "\tsw t0, (t5)\n";
     }
-    std::cout << "\tsw t0, (t5)\n";
   }
   else {
     if(stack_offset.find(store.dest) == stack_offset.end()) {
       stack_offset[store.dest] = st_id;
       st_id += 4;
     }
-    std::cout << "\tli t6, " << stack_offset[store.dest] << std::endl;
-    std::cout << "\tadd t6, sp, t6\n";
-    std::cout << "\tsw t0, (t6)\n";
+    if (stack_offset[store.dest] <= 2047 && stack_offset[store.dest] >= -2048) {
+      std::cout << "\tsw t0, " << stack_offset[store.dest] << "(sp)\n";
+    }
+    else {
+      std::cout << "\tli t6, " << stack_offset[store.dest] << std::endl;
+      std::cout << "\tadd t6, sp, t6\n";
+      std::cout << "\tsw t0, (t6)\n";
+    }
   }
 }
 
@@ -398,9 +408,14 @@ int Visit(const koopa_raw_load_t &load, int &st_id) {
   if(load.src->kind.tag == KOOPA_RVT_GLOBAL_ALLOC) {
     std::cout << "\tla t0, " << load.src->name + 1 << std::endl;
     std::cout << "\tlw t1, 0(t0)\n";
-    std::cout << "\tli t6, " << st_id << std::endl;
-    std::cout << "\tadd t6, t6, sp\n";
-    std::cout << "\tsw t1, (t6)\n";
+    if (st_id <= 2047 && st_id >= -2048) {
+      std::cout << "\tsw t1, " << st_id << "(sp)\n";
+    }
+    else {
+      std::cout << "\tli t6, " << st_id << std::endl;
+      std::cout << "\tadd t6, t6, sp\n";
+      std::cout << "\tsw t1, (t6)\n";
+    }
     st_id += 4;
     return st_id - 4;
   }
@@ -409,14 +424,24 @@ int Visit(const koopa_raw_load_t &load, int &st_id) {
     if(stack_offset[load.src] == 0)
       std::cout << "\tlw t1, (sp)\n";
     else {
-      std::cout << "\tli t6, " << stack_offset[load.src] << std::endl;
-      std::cout << "\tadd t6, t6, sp\n";
-      std::cout << "\tlw t1, (t6)\n";
+      if (stack_offset[load.src] <= 2047 && stack_offset[load.src] >= -2048) {
+        std::cout << "\tlw t1, " << stack_offset[load.src] << "(sp)\n";
+      }
+      else {
+        std::cout << "\tli t6, " << stack_offset[load.src] << std::endl;
+        std::cout << "\tadd t6, t6, sp\n";
+        std::cout << "\tlw t1, (t6)\n";
+      }
     }
     std::cout << "\tlw t2, (t1)\n";
-    std::cout << "\tli t6, " << st_id << std::endl;
-    std::cout << "\tadd t6, t6, sp\n";
-    std::cout << "\tsw t2, (t6)\n";
+    if (st_id <= 2047 && st_id >= -2048) {
+      std::cout << "\tsw t2, " << st_id << "(sp)\n";
+    }
+    else {
+      std::cout << "\tli t6, " << st_id << std::endl;
+      std::cout << "\tadd t6, t6, sp\n";
+      std::cout << "\tsw t2, (t6)\n";
+    }
     st_id += 4;
     return st_id - 4;
   }
@@ -453,9 +478,14 @@ void Visit(const koopa_raw_branch_t &branch) {
   if(branch.cond->kind.tag == KOOPA_RVT_INTEGER)
     std::cout << "\tli t0, " << branch.cond->kind.data.integer.value << std::endl;
   else {
-    std::cout << "\tli t6, " << stack_offset[branch.cond] << std::endl;
-    std::cout << "\tadd t6, sp, t6\n";
-    std::cout << "\tlw t0, (t6)\n";
+    if (stack_offset[branch.cond] <= 2047 && stack_offset[branch.cond] >= -2048) {
+      std::cout << "\tlw t0, " << stack_offset[branch.cond] << "(sp)\n";
+    }
+    else {
+      std::cout << "\tli t6, " << stack_offset[branch.cond] << std::endl;
+      std::cout << "\tadd t6, sp, t6\n";
+      std::cout << "\tlw t0, (t6)\n";
+    }
   }
   std::cout << "\tbnez t0, " << "median_branch" << (branch.true_bb->name + 1) << std::endl;
   std::cout << "\tbeqz t0, " << "median_branch" << (branch.false_bb->name + 1) << std::endl;
@@ -482,9 +512,14 @@ void Visit(const koopa_raw_call_t &call, int st_offset) {
       }
       else {
         std::cout << "\tli t0, " << ptr->kind.data.integer.value << std::endl;
-        std::cout << "\tli t6, " << param_id << std::endl;
-        std::cout << "\tadd t6, t6, sp\n";
-        std::cout << "\tsw t0, (t6)\n";
+        if (param_id <= 2047 && param_id >= -2048) {
+          std::cout << "\tsw t0, " << param_id << "(sp)\n";
+        }
+        else {
+          std::cout << "\tli t6, " << param_id << std::endl;
+          std::cout << "\tadd t6, t6, sp\n";
+          std::cout << "\tsw t0, (t6)\n";
+        }
         param_id += 4;
       }
     }
@@ -494,17 +529,32 @@ void Visit(const koopa_raw_call_t &call, int st_offset) {
       }
       else {
         if(i < 8) {
-          std::cout << "\tli t6, " << stack_offset[ptr] << std::endl;
-          std::cout << "\tadd t6, t6, sp\n";
-          std::cout << "\tlw a" << i << ", (t6)\n";
+          if (stack_offset[ptr] <= 2047 && stack_offset[ptr] >= -2048) {
+            std::cout << "\tlw a" << i << ", " << stack_offset[ptr] << "(sp)\n";
+          }
+          else {
+            std::cout << "\tli t6, " << stack_offset[ptr] << std::endl;
+            std::cout << "\tadd t6, t6, sp\n";
+            std::cout << "\tlw a" << i << ", (t6)\n";
+          }
         }
         else {
-          std::cout << "\tli t6, " << stack_offset[ptr] << std::endl;
-          std::cout << "\tadd t6, t6, sp\n";
-          std::cout << "\tlw t0, (t6)\n";
-          std::cout << "\tli t5, " << param_id << std::endl;
-          std::cout << "\tadd t5, t5, sp\n";
-          std::cout << "\tsw t0, (t5)\n";
+          if (stack_offset[ptr] <= 2047 && stack_offset[ptr] >= -2048) {
+            std::cout << "\tlw t0, " << stack_offset[ptr] << "(sp)\n";
+          }
+          else {
+            std::cout << "\tli t6, " << stack_offset[ptr] << std::endl;
+            std::cout << "\tadd t6, t6, sp\n";
+            std::cout << "\tlw t0, (t6)\n";
+          }
+          if (param_id <= 2047 && param_id >= -2048) {
+            std::cout << "\tsw t0, " << param_id << "(sp)\n";
+          }
+          else {
+            std::cout << "\tli t6, " << param_id << std::endl;
+            std::cout << "\tadd t6, t6, sp\n";
+            std::cout << "\tsw t0, (t6)\n";
+          }
           param_id += 4;
         }  
       }
@@ -527,32 +577,52 @@ void Visit(const koopa_raw_get_elem_ptr_t &get_elem_ptr, int &st_id) {
     std::cout << "\tadd t6, t6, sp\n";
   }
   else {
-    std::cout << "\tli t5, " << stack_offset[get_elem_ptr.src] << std::endl;
-    std::cout << "\tadd t5, t5, sp\n";
-    std::cout << "\tlw t6, (t5)\n";
+    if (stack_offset[get_elem_ptr.src] <= 2047 && stack_offset[get_elem_ptr.src] >= -2048) {
+      std::cout << "\tlw t6, " << stack_offset[get_elem_ptr.src] << "(sp)\n";
+    }
+    else {
+      std::cout << "\tli t5, " << stack_offset[get_elem_ptr.src] << std::endl;
+      std::cout << "\tadd t5, t5, sp\n";
+      std::cout << "\tlw t6, (t5)\n";
+    }
   }
 
   if(get_elem_ptr.index->kind.tag == KOOPA_RVT_INTEGER) {
     if(get_elem_ptr.index->kind.data.integer.value == 0) {
-      std::cout << "\tli t1, " << st_id << std::endl;
-      std::cout << "\tadd t1, t1, sp\n";
-      std::cout << "\tsw t6, (t1)\n";
+      if (st_id <= 2047 && st_id >= -2048) {
+        std::cout << "\tsw t6, " << st_id << "(sp)\n";
+      }
+      else {
+        std::cout << "\tli t1, " << st_id << std::endl;
+        std::cout << "\tadd t1, t1, sp\n";
+        std::cout << "\tsw t6, (t1)\n";
+      }
       return;
     }
     else
       std::cout << "\tli t1, " << get_elem_ptr.index->kind.data.integer.value << std::endl;
   }
   else {
-    std::cout << "\tli t5, " << stack_offset[get_elem_ptr.index] << std::endl;
-    std::cout << "\tadd t5, t5, sp\n";
-    std::cout << "\tlw t1, (t5)\n";
+    if (stack_offset[get_elem_ptr.index] <= 2047 && stack_offset[get_elem_ptr.index] >= -2048) {
+      std::cout << "\tlw t1, " << stack_offset[get_elem_ptr.index] << "(sp)\n";
+    }
+    else {
+      std::cout << "\tli t5, " << stack_offset[get_elem_ptr.index] << std::endl;
+      std::cout << "\tadd t5, t5, sp\n";
+      std::cout << "\tlw t1, (t5)\n";
+    }
   }
   std::cout << "\tli t2, " << off_size << std::endl;
   std::cout << "\tmul t1, t1, t2\n";
   std::cout << "\tadd t6, t6, t1\n";
-  std::cout << "\tli t1, " << st_id << std::endl;
-  std::cout << "\tadd t1, t1, sp\n";
-  std::cout << "\tsw t6, (t1)\n";
+  if (st_id <= 2047 && st_id >= -2048) {
+    std::cout << "\tsw t6, " << st_id << "(sp)\n";
+  }
+  else {
+    std::cout << "\tli t1, " << st_id << std::endl;
+    std::cout << "\tadd t1, t1, sp\n";
+    std::cout << "\tsw t6, (t1)\n";
+  }
 }
 
 // 访问 get_ptr 指令
@@ -570,32 +640,52 @@ void Visit(const koopa_raw_get_ptr_t &get_ptr, int &st_id) {
     std::cout << "\tadd t6, t6, sp\n";
   }
   else {
-    std::cout << "\tli t5, " << stack_offset[get_ptr.src] << std::endl;
-    std::cout << "\tadd t5, t5, sp\n";
-    std::cout << "\tlw t6, (t5)\n";
+    if (stack_offset[get_ptr.src] <= 2047 && stack_offset[get_ptr.src] >= -2048) {
+      std::cout << "\tlw t6, " << stack_offset[get_ptr.src] << "(sp)\n";
+    }
+    else {
+      std::cout << "\tli t5, " << stack_offset[get_ptr.src] << std::endl;
+      std::cout << "\tadd t5, t5, sp\n";
+      std::cout << "\tlw t6, (t5)\n";
+    }
   }
 
   if(get_ptr.index->kind.tag == KOOPA_RVT_INTEGER) {
     if(get_ptr.index->kind.data.integer.value == 0) {
-      std::cout << "\tli t1, " << st_id << std::endl;
-      std::cout << "\tadd t1, t1, sp\n";
-      std::cout << "\tsw t6, (t1)\n";
+      if (st_id <= 2047 && st_id >= -2048) {
+        std::cout << "\tsw t6, " << st_id << "(sp)\n";
+      }
+      else {
+        std::cout << "\tli t1, " << st_id << std::endl;
+        std::cout << "\tadd t1, t1, sp\n";
+        std::cout << "\tsw t6, (t1)\n";
+      }
       return;
     }
     else
       std::cout << "\tli t1, " << get_ptr.index->kind.data.integer.value << std::endl;
   }
   else {
-    std::cout << "\tli t5, " << stack_offset[get_ptr.index] << std::endl;
-    std::cout << "\tadd t5, t5, sp\n";
-    std::cout << "\tlw t1, (t5)\n";
+    if (stack_offset[get_ptr.index] <= 2047 && stack_offset[get_ptr.index] >= -2048) {
+      std::cout << "\tlw t1, " << stack_offset[get_ptr.index] << "(sp)\n";
+    }
+    else {
+      std::cout << "\tli t5, " << stack_offset[get_ptr.index] << std::endl;
+      std::cout << "\tadd t5, t5, sp\n";
+      std::cout << "\tlw t1, (t5)\n";
+    }
   }
   std::cout << "\tli t2, " << off_size << std::endl;
   std::cout << "\tmul t1, t1, t2\n";
   std::cout << "\tadd t6, t6, t1\n";
-  std::cout << "\tli t1, " << st_id << std::endl;
-  std::cout << "\tadd t1, t1, sp\n";
-  std::cout << "\tsw t6, (t1)\n";
+  if (st_id <= 2047 && st_id >= -2048) {
+    std::cout << "\tsw t6, " << st_id << "(sp)\n";
+  }
+  else {
+    std::cout << "\tli t1, " << st_id << std::endl;
+    std::cout << "\tadd t1, t1, sp\n";
+    std::cout << "\tsw t6, (t1)\n";
+  }
 }
 
 // 访问 alloc 指令

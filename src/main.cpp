@@ -46,7 +46,7 @@ int main(int argc, const char *argv[]) {
     std::cout << str;
     fclose(yyout);
   }
-  else if(!strcmp(mode, "-riscv")) {
+  else if(!strcmp(mode, "-riscv") || !strcmp(mode, "-perf")) {
     // 将 Koopa IR 转换成 RISC-V 汇编
     yyout = freopen(output, "w", stdout);
     koopa_raw_program_builder_t builder = new_builder();
